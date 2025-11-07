@@ -1,5 +1,6 @@
 package com.example.lunastreaming.util;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -10,6 +11,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
@@ -21,27 +23,29 @@ public class SecurityConfig {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
+    @Value("${spring.cors.allowed-origins}")
+    private String allowedOrigins; // ejemplo: https://lunaplataformas.com
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // Orígenes permitidos. Ajusta para producción a tu frontend real.
-        // Ejemplo para desarrollo local:
-        config.setAllowedOriginPatterns(List.of("http://localhost:3000", "http://127.0.0.1:3000"));
+        // Production origin desde application.yml (exact match)
+        List<String> origins = new ArrayList<>();
+        origins.add(allowedOrigins);
 
-        // Métodos permitidos incluyendo PATCH y OPTIONS
+        // También permitir local para desarrollo si lo quieres
+        origins.add("http://localhost:3000");
+        origins.add("http://127.0.0.1:3000");
+
+        config.setAllowedOrigins(origins);
+        // Si prefieres patrones (ej. preview.*.vercel.app) usa:
+        // config.setAllowedOriginPatterns(List.of(allowedOrigins, "http://localhost:3000"));
+
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-
-        // Headers permitidos en la preflight (incluye Authorization si usas Bearer)
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "X-Requested-With"));
-
-        // Headers que estarán expuestos al cliente
         config.setExposedHeaders(List.of("Authorization", "Content-Type"));
-
-        // Permitir cookies/credenciales si tu auth depende de ellas
         config.setAllowCredentials(true);
-
-        // Cache de la preflight en segundos
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -49,22 +53,21 @@ public class SecurityConfig {
         return source;
     }
 
-
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // habilita CORS usando el bean definido arriba
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .csrf(csrf -> csrf.disable()) // forma compatible con la API moderna
+                .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // permitir preflight
-                        .requestMatchers("/api/auth/**").permitAll() // endpoints públicos de auth
-                        .requestMatchers("/api/categories", "/api/categories/**").permitAll() // permitir categories públicamente
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/categories", "/api/categories/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
+
 
 }
