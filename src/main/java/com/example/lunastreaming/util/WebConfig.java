@@ -1,5 +1,6 @@
 package com.example.lunastreaming.util;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,10 +13,14 @@ import java.util.List;
 @Configuration
 public class WebConfig {
 
+
+    @Value("${spring.cors.allowed-origins}")
+    private String allowedOrigins;
+
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(List.of("http://localhost:3000")); // ajustar al origen del frontend
+        cfg.setAllowedOrigins(List.of(allowedOrigins)); // ajustar al origen del frontend
         cfg.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
         cfg.setAllowedHeaders(List.of("*")); // permite Authorization y Content-Type
         cfg.setExposedHeaders(List.of("Authorization"));
