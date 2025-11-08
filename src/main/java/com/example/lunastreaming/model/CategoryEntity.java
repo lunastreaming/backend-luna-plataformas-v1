@@ -6,7 +6,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "category", schema = "lunastreaming")
+@Table(name = "category")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
