@@ -19,10 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Date;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -100,15 +97,22 @@ public class UserService {
 
         UserEntity u = opt.get();
 
+        // Validar estado (ejemplo: campo "active" booleano)
+        if (!"active".equalsIgnoreCase(u.getStatus())) {
+            throw new AccessDeniedException("Usuario inactivo, no puede iniciar sesión");
+        }
+
         // Validar contraseña
         if (!passwordEncoder.matches(req.password, u.getPasswordHash())) {
             throw new IllegalArgumentException("invalid_credentials");
         }
 
         // Validar rol
-        String actualRole = u.getRole(); // o u.getRoles().get(0) si usas lista
+        String actualRole = u.getRole();
         if (rolExpected != null && !actualRole.equalsIgnoreCase(rolExpected)) {
-            throw new AccessDeniedException("Rol no autorizado: se esperaba " + rolExpected + " pero el usuario tiene " + actualRole);
+            throw new AccessDeniedException(
+                    "Rol no autorizado: se esperaba " + rolExpected + " pero el usuario tiene " + actualRole
+            );
         }
 
         // Generar access token
@@ -132,10 +136,19 @@ public class UserService {
 
 
     public List<UserSummary> listByRole(String role) {
-        return userRepository.findByRole(role).stream()
+        List<UserEntity> users;
+        if ("seller".equalsIgnoreCase(role)) {
+            // traer ambos roles
+            users = userRepository.findByRoleIn(Arrays.asList("seller", "user"));
+        } else {
+            users = userRepository.findByRole(role);
+        }
+
+        return users.stream()
                 .map(UserMapper::toSummary)
                 .collect(Collectors.toList());
     }
+
 
     @Transactional
     public UserSummary updateStatus(UUID userId, String newStatus) {

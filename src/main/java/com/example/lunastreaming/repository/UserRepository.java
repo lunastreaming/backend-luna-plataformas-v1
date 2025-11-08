@@ -14,6 +14,8 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
     Optional<UserEntity> findByPhone(String phone);
     List<UserEntity> findByRole(String role);
     Optional<UserEntity> findByReferrerCode(String referrerCode);
+    List<UserEntity> findByRoleIn(List<String> roles);
+
 
 
 }
