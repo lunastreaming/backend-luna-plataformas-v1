@@ -2,6 +2,7 @@ package com.example.lunastreaming.service;
 
 
 import com.example.lunastreaming.builder.WalletBuilder;
+import com.example.lunastreaming.model.ExchangeRate;
 import com.example.lunastreaming.model.WalletResponse;
 import com.example.lunastreaming.util.LunaException;
 import org.springframework.web.server.ResponseStatusException;
@@ -40,19 +41,37 @@ public class WalletService {
         UserEntity user = userRepo.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
-        BigDecimal finalAmount = amount;
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Monto inválido");
+        }
+
+        BigDecimal finalAmountUsd = amount;
         BigDecimal rate = null;
 
         if (isSoles) {
-            rate = exchangeService.getCurrentRate().getRate(); // PEN → USD
-            finalAmount = amount.divide(rate, 2, RoundingMode.HALF_UP);
+            // Nota: asumimos que exchangeService.getCurrentRate().getRate()
+            // devuelve la tasa como PEN por USD (ej. 3.8 PEN = 1 USD).
+            // Entonces: USD = PEN / (PEN per USD)
+            ExchangeRate currentRate = exchangeService.getCurrentRate();
+            if (currentRate == null || currentRate.getRate() == null) {
+                throw new IllegalStateException("Tipo de cambio no disponible");
+            }
+            rate = currentRate.getRate();
+            if (rate.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalStateException("Tipo de cambio inválido: " + rate);
+            }
+
+            finalAmountUsd = amount.divide(rate, 2, RoundingMode.HALF_UP);
+        } else {
+            // Si no es soles, asumimos que amount ya viene en USD
+            finalAmountUsd = amount.setScale(2, RoundingMode.HALF_UP);
         }
 
         WalletTransaction tx = WalletTransaction.builder()
                 .user(user)
                 .type("recharge")
-                .amount(finalAmount)
-                .currency("USD") // ← siempre se guarda en dólares
+                .amount(finalAmountUsd)
+                .currency("USD")
                 .exchangeApplied(isSoles)
                 .exchangeRate(rate)
                 .status("pending")
@@ -60,7 +79,6 @@ public class WalletService {
                 .build();
 
         return walletTransactionRepository.save(tx);
-
     }
 
     @Transactional
