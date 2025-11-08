@@ -13,8 +13,6 @@ import java.util.List;
 
 @Configuration
 public class WebConfig {
-
-
     @Value("${spring.cors.allowed-origins}")
     private String allowedOrigins;
 
@@ -33,11 +31,16 @@ public class WebConfig {
         return source;
     }
 
+    @Bean
+    public CorsFilter corsFilter() {
+        return new CorsFilter((UrlBasedCorsConfigurationSource) corsConfigurationSource());
+    }
 
     @Bean
     public FilterRegistrationBean<CorsFilter> corsFilterRegistration(CorsFilter filter) {
         FilterRegistrationBean<CorsFilter> registration = new FilterRegistrationBean<>(filter);
-        registration.setOrder(0); // asegurar prioridad alta para que CORS se procese antes de seguridad
+        registration.setOrder(0);
         return registration;
     }
+
 }
