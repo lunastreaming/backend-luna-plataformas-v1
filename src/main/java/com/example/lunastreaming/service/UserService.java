@@ -11,11 +11,11 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -92,27 +92,27 @@ public class UserService {
         // Simular tiempo si no se encuentra el usuario
         if (opt.isEmpty()) {
             passwordEncoder.encode("simulate");
-            throw new IllegalArgumentException("invalid_credentials");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_credentials");
         }
 
         UserEntity u = opt.get();
 
-        // Validar estado (ejemplo: campo "active" booleano)
+        // Validar estado (ejemplo: campo "active" booleano o string)
         if (!"active".equalsIgnoreCase(u.getStatus())) {
-            throw new AccessDeniedException("Usuario inactivo, no puede iniciar sesión");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Usuario inactivo: contacta con soporte para reactivar tu cuenta");
         }
 
         // Validar contraseña
         if (!passwordEncoder.matches(req.password, u.getPasswordHash())) {
-            throw new IllegalArgumentException("invalid_credentials");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_credentials");
         }
 
         // Validar rol
         String actualRole = u.getRole();
         if (rolExpected != null && !actualRole.equalsIgnoreCase(rolExpected)) {
-            throw new AccessDeniedException(
-                    "Rol no autorizado: se esperaba " + rolExpected + " pero el usuario tiene " + actualRole
-            );
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Rol no autorizado");
         }
 
         // Generar access token
@@ -124,7 +124,6 @@ public class UserService {
                 Duration.ofDays(1)
         );
 
-        // Construir respuesta
         return LoginResponse.builder()
                 .token(accessToken)
                 .refreshToken(refreshToken.getToken())
@@ -133,6 +132,7 @@ public class UserService {
                 .role(actualRole)
                 .build();
     }
+
 
 
     public List<UserSummary> listByRole(String role) {

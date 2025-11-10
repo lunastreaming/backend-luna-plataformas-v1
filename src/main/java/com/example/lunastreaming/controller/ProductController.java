@@ -1,6 +1,7 @@
 package com.example.lunastreaming.controller;
 
 import com.example.lunastreaming.model.ProductEntity;
+import com.example.lunastreaming.model.ProductResponse;
 import com.example.lunastreaming.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -28,17 +29,20 @@ public class ProductController {
 
 
     @GetMapping("/provider/me")
-    public ResponseEntity<List<ProductEntity>> getByAuthenticatedProvider(Principal principal) {
+    public ResponseEntity<List<ProductResponse>> getByAuthenticatedProvider(Principal principal) {
         UUID userId = UUID.fromString(principal.getName());
-        List<ProductEntity> products = productService.getAllByProvider(userId);
-        return ResponseEntity.ok(products); // nunca devuelve null
+        List<ProductResponse> allByProviderWithStocks = productService.getAllByProviderWithStocks(userId);
+        return ResponseEntity.ok(allByProviderWithStocks); // nunca devuelve null
     }
 
 
     @GetMapping("/{id}")
-    public ProductEntity getById(@PathVariable UUID id) {
-        return productService.getById(id);
+    public ProductResponse getById(@PathVariable UUID id, Principal principal) {
+        // principal nunca debe ser null si el endpoint está protegido; si puede serlo, maneja el caso
+        String principalName = principal != null ? principal.getName() : null;
+        return productService.getByIdWithStocksAndAuthorization(id, principalName);
     }
+
 
     @PutMapping("/{id}")
     public ResponseEntity<ProductEntity> update(

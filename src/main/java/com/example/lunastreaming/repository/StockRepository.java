@@ -12,4 +12,6 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
 
     List<StockEntity> findByProductProviderId(UUID providerId);
 
+    List<StockEntity> findByProductIdIn(List<UUID> productIds);
+
 }

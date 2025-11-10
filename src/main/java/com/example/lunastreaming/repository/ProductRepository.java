@@ -18,5 +18,4 @@ public interface ProductRepository extends JpaRepository<ProductEntity, UUID> {
     // activos por categoría
     Page<ProductEntity> findByActiveTrueAndCategoryId(Integer categoryId, Pageable pageable);
 
-
 }

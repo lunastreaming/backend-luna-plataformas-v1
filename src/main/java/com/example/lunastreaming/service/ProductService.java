@@ -1,11 +1,13 @@
 package com.example.lunastreaming.service;
 
-import com.example.lunastreaming.model.ProductEntity;
-import com.example.lunastreaming.model.UserEntity;
+import com.example.lunastreaming.builder.StockBuilder;
+import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.repository.ProductRepository;
 import com.example.lunastreaming.repository.SettingRepository;
+import com.example.lunastreaming.repository.StockRepository;
 import com.example.lunastreaming.repository.UserRepository;
-import jakarta.transaction.Transactional;
+import com.example.lunastreaming.util.DaysUtil;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,11 +23,10 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +35,13 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final SettingRepository settingRepository;
+    private final StockRepository stockRepository;
+    private final StockBuilder stockBuilder;
+    private final DaysUtil daysUtil;
+
+    // zona a usar para el cálculo (ajusta si usas otra)
+    private final ZoneId zone = ZoneId.of("America/Lima");
+
 
     @Transactional
     public ProductEntity create(ProductEntity product) {
@@ -43,12 +51,91 @@ public class ProductService {
         return productRepository.save(product);
     }
 
-    public List<ProductEntity> getAllByProvider(UUID providerId) {
-        return productRepository.findByProviderId(providerId);
+    @Transactional(readOnly = true)
+    public List<ProductResponse> getAllByProviderWithStocks(UUID providerId) {
+        // 1) Obtener productos del proveedor
+        List<ProductEntity> products = productRepository.findByProviderId(providerId);
+        if (products.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 2) Extraer ids y obtener todos los stocks de una sola vez
+        List<UUID> productIds = products.stream()
+                .map(ProductEntity::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        List<StockEntity> stocks = stockRepository.findByProductIdIn(productIds);
+
+        // 3) Agrupar stocks por productId
+        Map<UUID, List<StockEntity>> stocksByProduct = stocks.stream()
+                .filter(s -> s.getProduct() != null && s.getProduct().getId() != null)
+                .collect(Collectors.groupingBy(s -> s.getProduct().getId()));
+
+
+        // 4) Mapear a DTOs
+        return products.stream()
+                .map(product -> {
+                    List<StockEntity> stock = stocksByProduct.getOrDefault(product.getId(), Collections.emptyList());
+
+                    List<StockResponse> stockResponses = stock.stream().map(stockBuilder::toStockResponse).toList();
+                    product.setDaysRemaining(DaysUtil.daysRemainingFromTimestamp(product.getPublishEnd(), zone));
+                    return ProductResponse
+                            .builder()
+                            .product(product)
+                            .stockResponses(stockResponses)
+                            .build();
+                })
+                .collect(Collectors.toList());
     }
 
-    public ProductEntity getById(UUID id) {
-        return productRepository.findById(id).orElseThrow(() -> new RuntimeException("Product not found"));
+    @Transactional(readOnly = true)
+    public ProductResponse getByIdWithStocksAndAuthorization(UUID productId, String principalName) {
+        // 1) Cargar producto o 404
+        ProductEntity product = productRepository.findById(productId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto no encontrado"));
+
+        // 2) Validación directa por providerId (más rápida)
+        UUID providerId = product.getProviderId(); // campo column: provider_id
+        boolean authorized = false;
+
+        if (providerId != null && principalName != null) {
+            try {
+                // Intentamos interpretar principalName como UUID (userId)
+                UUID principalUuid = UUID.fromString(principalName);
+                authorized = principalUuid.equals(providerId);
+            } catch (IllegalArgumentException ex) {
+                // Si principalName no es UUID, como fallback opcional podemos resolver username -> userId
+                if (userRepository != null) {
+                    Optional<UserEntity> optUser = userRepository.findByUsername(principalName);
+                    if (optUser.isPresent() && Objects.equals(optUser.get().getId(), providerId)) {
+                        authorized = true;
+                    }
+                }
+            }
+        }
+
+        if (!authorized) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado para acceder a este producto");
+        }
+
+        // 3) Obtener stocks asociados y mapear (usa método derivado JPA que filtra por product.id)
+        List<StockEntity> stocks = stockRepository.findByProductId(productId);
+
+        // Mapear stocks a DTOs (vacío si no hay)
+        List<StockResponse> stockResponses = new ArrayList<>();
+        for (StockEntity x : stocks) {
+            StockResponse stockResponse = stockBuilder.toStockResponse(x);
+            stockResponses.add(stockResponse);
+        }
+        product.setDaysRemaining(DaysUtil.daysRemainingFromTimestamp(product.getPublishEnd(), zone));
+
+        // 4) Construir y retornar ProductResponse
+        return ProductResponse
+                .builder()
+                .product(product)
+                .stockResponses(stockResponses)
+                .build();
     }
 
     @Transactional
@@ -239,7 +326,5 @@ public class ProductService {
     public Page<ProductEntity> listActiveByCategory(Integer categoryId, Pageable pageable) {
         return productRepository.findByActiveTrueAndCategoryId(categoryId, pageable);
     }
-
-
 
 }
