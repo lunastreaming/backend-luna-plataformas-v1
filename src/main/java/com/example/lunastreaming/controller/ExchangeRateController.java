@@ -2,6 +2,7 @@ package com.example.lunastreaming.controller;
 
 import com.example.lunastreaming.model.ExchangeRate;
 import com.example.lunastreaming.service.ExchangeRateService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,10 +14,10 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/exchange")
+@RequiredArgsConstructor
 public class ExchangeRateController {
 
-    @Autowired
-    private ExchangeRateService exchangeRateService;
+    private final ExchangeRateService exchangeRateService;
 
     @GetMapping("/current")
     public ResponseEntity<?> getCurrentRate() {

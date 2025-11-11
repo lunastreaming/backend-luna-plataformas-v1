@@ -1,12 +1,9 @@
 package com.example.lunastreaming.builder;
 
-import com.example.lunastreaming.model.ProductEntity;
 import com.example.lunastreaming.model.StockEntity;
 import com.example.lunastreaming.model.StockResponse;
-import com.example.lunastreaming.model.TypeEnum;
 import org.springframework.stereotype.Component;
 
-import java.util.UUID;
 
 @Component
 public class StockBuilder {

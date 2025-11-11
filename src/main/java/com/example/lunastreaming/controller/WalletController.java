@@ -18,8 +18,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class WalletController {
 
-    @Autowired
-    private WalletService walletService;
+    private final WalletService walletService;
 
     @PostMapping("/recharge")
     public ResponseEntity<?> requestRecharge(@RequestBody RechargeRequest req, Principal principal) {

@@ -9,7 +9,7 @@ import lombok.*;
 @Builder
 public class CategoryResponse {
 
-    private Long id;
+    private Integer id;
     private String name;
     private String imageUrl;
     private String status;

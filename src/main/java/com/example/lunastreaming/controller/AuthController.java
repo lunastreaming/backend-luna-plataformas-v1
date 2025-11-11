@@ -4,8 +4,8 @@ import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.security.JwtTokenProvider;
 import com.example.lunastreaming.service.RefreshTokenService;
 import com.example.lunastreaming.service.UserService;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,16 +18,14 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
-    @Autowired
-    private RefreshTokenService refreshTokenService;
+    private final RefreshTokenService refreshTokenService;
 
-    @Autowired
-    private JwtTokenProvider jwtTokenProvider;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    @Autowired
-    UserService userService;
+    private final UserService userService;
 
     @PostMapping("/login-seller")
     public ResponseEntity<LoginResponse> loginSeller(@Valid @RequestBody LoginRequest req) {

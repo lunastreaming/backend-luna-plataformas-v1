@@ -3,6 +3,7 @@ package com.example.lunastreaming.service;
 import com.example.lunastreaming.model.RefreshToken;
 import com.example.lunastreaming.repository.RefreshTokenRepository;
 import com.example.lunastreaming.util.TokenUtil;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -12,10 +13,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class RefreshTokenService {
 
-    @Autowired
-    private RefreshTokenRepository refreshTokenRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     public RefreshToken create(String userId, Duration ttl) {
         String token = UUID.randomUUID().toString() + "-" + TokenUtil.generateSecureToken(48); // 48 bytes ≈ 64 chars

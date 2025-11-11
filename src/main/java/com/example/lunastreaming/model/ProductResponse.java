@@ -12,7 +12,7 @@ import java.util.List;
 @Builder
 public class ProductResponse {
 
-    private ProductEntity product;
+    private ProductDto product;
 
     private List<StockResponse> stockResponses;
 

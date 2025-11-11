@@ -1,12 +1,11 @@
 package com.example.lunastreaming.service;
 
+import com.example.lunastreaming.builder.ProductBuilder;
 import com.example.lunastreaming.builder.StockBuilder;
 import com.example.lunastreaming.model.*;
-import com.example.lunastreaming.repository.ProductRepository;
-import com.example.lunastreaming.repository.SettingRepository;
-import com.example.lunastreaming.repository.StockRepository;
-import com.example.lunastreaming.repository.UserRepository;
+import com.example.lunastreaming.repository.*;
 import com.example.lunastreaming.util.DaysUtil;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -23,9 +22,9 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,7 +36,8 @@ public class ProductService {
     private final SettingRepository settingRepository;
     private final StockRepository stockRepository;
     private final StockBuilder stockBuilder;
-    private final DaysUtil daysUtil;
+    private final ProductBuilder productBuilder;
+    private final CategoryRepository categoryRepository;
 
     // zona a usar para el cálculo (ajusta si usas otra)
     private final ZoneId zone = ZoneId.of("America/Lima");
@@ -82,7 +82,7 @@ public class ProductService {
                     product.setDaysRemaining(DaysUtil.daysRemainingFromTimestamp(product.getPublishEnd(), zone));
                     return ProductResponse
                             .builder()
-                            .product(product)
+                            .product(productBuilder.productDtoFromEntity(product, null, null))
                             .stockResponses(stockResponses)
                             .build();
                 })
@@ -133,7 +133,7 @@ public class ProductService {
         // 4) Construir y retornar ProductResponse
         return ProductResponse
                 .builder()
-                .product(product)
+                .product(productBuilder.productDtoFromEntity(product, null, null))
                 .stockResponses(stockResponses)
                 .build();
     }
@@ -318,13 +318,197 @@ public class ProductService {
     }
 
 
-    public Page<ProductEntity> listActiveProducts(Pageable pageable) {
-        return productRepository.findByActiveTrue(pageable);
+    /**
+     * Lista productos activos (paginado) y añade categoryName, providerName y resumen de stock.
+     * Devuelve Page<ProductDto>.
+     */
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> listActiveProductsWithDetails(Pageable pageable) {
+        Page<ProductEntity> page = productRepository.findByActiveTrue(pageable);
+
+        if (page.isEmpty()) {
+            return new PageImpl<>(Collections.emptyList(), pageable, page.getTotalElements());
+        }
+
+        // 1) ids a cargar en bloque
+        List<Integer> categoryIds = page.stream()
+                .map(ProductEntity::getCategoryId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        List<UUID> providerIds = page.stream()
+                .map(ProductEntity::getProviderId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        List<UUID> productIds = page.stream()
+                .map(ProductEntity::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // 2) cargar categorías y mapear id -> name
+        Map<Integer, String> categoryNames = categoryIds.isEmpty()
+                ? Collections.emptyMap()
+                : categoryRepository.findAllById(categoryIds).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(CategoryEntity::getId, CategoryEntity::getName, (a, b) -> a));
+
+        // 3) cargar proveedores y mapear id -> UserEntity
+        Map<UUID, UserEntity> providersById = providerIds.isEmpty()
+                ? Collections.emptyMap()
+                : userRepository.findAllById(providerIds).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(UserEntity::getId, Function.identity(), (a, b) -> a));
+
+        // 4) cargar stocks por productIds y agrupar por productId
+        List<StockEntity> stockRows = productIds.isEmpty()
+                ? Collections.emptyList()
+                : stockRepository.findByProductIdIn(productIds);
+
+        Map<UUID, List<StockEntity>> stocksByProduct = stockRows.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(s -> {
+                    // intenta extraer productId desde campo directo o relación
+                    try {
+                        if (s.getProduct() != null && s.getProduct().getId() != null) return s.getProduct().getId();
+                    } catch (Exception ignored) {}
+                    try {
+                        // si StockEntity tiene getProductId()
+                        return (UUID) s.getClass().getMethod("getProductId").invoke(s);
+                    } catch (Exception ignored) {}
+                    return null;
+                }))
+                .entrySet().stream()
+                .filter(e -> e.getKey() != null)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        // 5) mapear a ProductResponse
+        List<ProductResponse> responses = page.stream()
+                .map(entity -> {
+                    String categoryName = entity.getCategoryId() == null ? null : categoryNames.get(entity.getCategoryId());
+                    UserEntity provider = entity.getProviderId() == null ? null : providersById.get(entity.getProviderId());
+                    String providerName = resolveProviderDisplayName(provider);
+
+                    ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName);
+
+                    List<StockEntity> stockForProduct = stocksByProduct.getOrDefault(entity.getId(), Collections.emptyList());
+                    List<StockResponse> stockResponses = stockForProduct.stream()
+                            .map(stockBuilder::toStockResponse)
+                            .collect(Collectors.toList());
+
+                    return ProductResponse.builder()
+                            .product(dto)
+                            .stockResponses(stockResponses)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return new PageImpl<>(responses, pageable, page.getTotalElements());
+    }
+
+    /**
+     * Igual que el anterior pero filtrando por categoryId; devuelve Page<ProductResponse>.
+     */
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> listActiveProductsByCategoryWithDetails(Integer categoryId, Pageable pageable) {
+        Page<ProductEntity> page = productRepository.findByActiveTrueAndCategoryId(categoryId, pageable);
+
+        if (page.isEmpty()) {
+            return new PageImpl<>(Collections.emptyList(), pageable, page.getTotalElements());
+        }
+
+        // Recolectar ids de providers y products en bloque
+        List<UUID> providerIds = page.stream()
+                .map(ProductEntity::getProviderId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        List<UUID> productIds = page.stream()
+                .map(ProductEntity::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Cargar proveedores en bloque
+        Map<UUID, UserEntity> providersById = providerIds.isEmpty()
+                ? Collections.emptyMap()
+                : userRepository.findAllById(providerIds).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(UserEntity::getId, Function.identity(), (a, b) -> a));
+
+        // Cargar stocks en bloque y agrupar por productId
+        List<StockEntity> stockRows = productIds.isEmpty()
+                ? Collections.emptyList()
+                : stockRepository.findByProductIdIn(productIds);
+
+        Map<UUID, List<StockEntity>> stocksByProduct = stockRows.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(s -> {
+                    if (s.getProduct() != null && s.getProduct().getId() != null) return s.getProduct().getId();
+                    // si tu StockEntity tiene getProductId()
+                    try {
+                        Object pid = s.getClass().getMethod("getProductId").invoke(s);
+                        if (pid instanceof UUID) return (UUID) pid;
+                    } catch (Exception ignored) {}
+                    return null;
+                }))
+                .entrySet().stream()
+                .filter(e -> e.getKey() != null)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        // Declarar categoryNameForFilter antes del stream para que sea visible dentro del lambda
+        final String categoryNameForFilter;
+        if (categoryId != null) {
+            categoryNameForFilter = categoryRepository.findById(categoryId)
+                    .map(CategoryEntity::getName)
+                    .orElse(null);
+        } else {
+            categoryNameForFilter = null;
+        }
+
+        // Construir responses sin llamadas adicionales al repo dentro del map
+        List<ProductResponse> responses = page.stream()
+                .map(entity -> {
+                    // usar la variable ya calculada
+                    String categoryName = categoryNameForFilter != null
+                            ? categoryNameForFilter
+                            : (entity.getCategoryId() == null ? null : categoryRepository.findById(entity.getCategoryId()).map(CategoryEntity::getName).orElse(null));
+
+                    UserEntity provider = entity.getProviderId() == null ? null : providersById.get(entity.getProviderId());
+                    String providerName = resolveProviderDisplayName(provider);
+
+                    ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName);
+
+                    List<StockEntity> stockForProduct = stocksByProduct.getOrDefault(entity.getId(), Collections.emptyList());
+                    List<StockResponse> stockResponses = stockForProduct.stream()
+                            .map(stockBuilder::toStockResponse)
+                            .collect(Collectors.toList());
+
+                    return ProductResponse.builder()
+                            .product(dto)
+                            .stockResponses(stockResponses)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return new PageImpl<>(responses, pageable, page.getTotalElements());
+    }
+
+    private String resolveProviderDisplayName(UserEntity user) {
+        if (user == null) return null;
+        if (safeNonBlank(user.getUsername())) return user.getUsername();
+        if (safeNonBlank(user.getPhone())) return user.getPhone();
+        return String.valueOf(user.getId());
+    }
+
+    private boolean safeNonBlank(String s) {
+        return s != null && !s.isBlank();
     }
 
 
-    public Page<ProductEntity> listActiveByCategory(Integer categoryId, Pageable pageable) {
-        return productRepository.findByActiveTrueAndCategoryId(categoryId, pageable);
-    }
 
 }

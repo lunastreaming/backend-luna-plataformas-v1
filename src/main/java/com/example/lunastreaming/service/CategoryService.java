@@ -6,18 +6,20 @@ import com.example.lunastreaming.model.CategoryResponse;
 import com.example.lunastreaming.model.CategoryEntity;
 import com.example.lunastreaming.repository.CategoryRepository;
 import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class CategoryService {
 
-    @Autowired
-    private CategoryRepository repository;
-    @Autowired
-    private CategoryBuilder categoryBuilder;
+
+    private final CategoryRepository repository;
+
+    private final CategoryBuilder categoryBuilder;
 
     public List<CategoryResponse> findAll() {
         List<CategoryEntity> categoryEntities = repository.findByStatusNot("removed");
@@ -26,7 +28,7 @@ public class CategoryService {
                 .toList();
     }
 
-    public CategoryResponse findById(Long id) {
+    public CategoryResponse findById(Integer id) {
         CategoryEntity categoryEntity = repository.findById(id).orElse(null);
         return categoryBuilder.categoryResponse(categoryEntity);
     }
@@ -39,7 +41,7 @@ public class CategoryService {
     }
 
     @Transactional
-    public CategoryResponse update(Long id, CategoryRequest categoryRequest) {
+    public CategoryResponse update(Integer id, CategoryRequest categoryRequest) {
         CategoryEntity categoryEntity = categoryBuilder.categoryRequest(categoryRequest);
         CategoryEntity existing = repository.findById(id).orElse(null);
         if (existing != null) {
@@ -53,13 +55,13 @@ public class CategoryService {
         return null;
     }
 
-    public void markCategoryAsRemoved(Long id) {
+    public void markCategoryAsRemoved(Integer id) {
         CategoryEntity category = repository.findById(id).orElseThrow();
         category.setStatus("removed");
         repository.save(category);
     }
 
-    public CategoryResponse updateCategoryStatus(Long id, String status) {
+    public CategoryResponse updateCategoryStatus(Integer id, String status) {
         CategoryEntity category = repository.findById(id)
                 .orElseThrow();
 

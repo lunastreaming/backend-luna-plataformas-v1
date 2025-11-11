@@ -2,6 +2,7 @@ package com.example.lunastreaming.service;
 
 import com.example.lunastreaming.model.ExchangeRate;
 import com.example.lunastreaming.repository.ExchangeRateRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -11,13 +12,12 @@ import java.math.RoundingMode;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class ExchangeRateService {
 
-    @Autowired
-    private ExchangeRateRepository exchangeRateRepository;
+    private final ExchangeRateRepository exchangeRateRepository;
 
-    @Autowired
-    private UserService userService;
+    private final UserService userService;
 
     public ExchangeRate getCurrentRate() {
         return exchangeRateRepository.findLatestRate(PageRequest.of(0, 1)).stream().findFirst()

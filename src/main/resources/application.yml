@@ -28,7 +28,7 @@ spring:
 app:
   jwt:
     secret: "Z2VuZXJhdGVkLXJhbmRvbS1zZWNyZXQtdGVzdC1iYXNlNjQ="
-    validity-ms: 86400000
+    validity-ms: 900000
 
 ---
 spring:
@@ -56,4 +56,4 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET}
-    validity-ms: 86400000
+    validity-ms: 900000

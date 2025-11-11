@@ -5,6 +5,7 @@ import com.example.lunastreaming.builder.WalletBuilder;
 import com.example.lunastreaming.model.ExchangeRate;
 import com.example.lunastreaming.model.WalletResponse;
 import com.example.lunastreaming.util.LunaException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
@@ -25,17 +26,17 @@ import java.util.UUID;
 
 
 @Service
+@RequiredArgsConstructor
 public class WalletService {
 
-    @Autowired
-    private WalletTransactionRepository walletTransactionRepository;
-    @Autowired
-    private UserRepository userRepo;
-    @Autowired
-    private ExchangeRateService exchangeService;
 
-    @Autowired
-    private WalletBuilder walletBuilder;
+    private final WalletTransactionRepository walletTransactionRepository;
+
+    private final UserRepository userRepo;
+
+    private final ExchangeRateService exchangeService;
+
+    private final WalletBuilder walletBuilder;
 
     public WalletTransaction requestRecharge(UUID userId, BigDecimal amount, boolean isSoles) {
         UserEntity user = userRepo.findById(userId)
