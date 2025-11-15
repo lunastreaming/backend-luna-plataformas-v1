@@ -38,6 +38,7 @@ public class ProductService {
     private final StockBuilder stockBuilder;
     private final ProductBuilder productBuilder;
     private final CategoryRepository categoryRepository;
+    private final WalletTransactionRepository walletTransactionRepository;
 
     // zona a usar para el cálculo (ajusta si usas otra)
     private final ZoneId zone = ZoneId.of("America/Lima");
@@ -227,23 +228,18 @@ public class ProductService {
 
         UUID callerId = resolveUserIdFromPrincipal(principal);
 
-        // ownership check
         if (!callerId.equals(product.getProviderId())) {
             throw new AccessDeniedException("No autorizado para publicar este producto");
         }
 
-        // obtain publish price from settings
         BigDecimal publishPrice = settingRepository.findValueNumByKey("supplierPublication")
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "supplierPublication no configurado"));
 
-        // load user and check balance
         UserEntity user = userRepository.findById(callerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
 
-        // balance from API stored as units (e.g., 86.48)
-        // balance puede ser null -> usamos BigDecimal.ZERO
         BigDecimal balance;
-        Object rawBalance = user.getBalance(); // ajusta el tipo si tu getter ya es BigDecimal/Double
+        Object rawBalance = user.getBalance();
 
         if (rawBalance == null) {
             balance = BigDecimal.ZERO;
@@ -254,51 +250,56 @@ public class ProductService {
         } else if (rawBalance instanceof String) {
             balance = new BigDecimal((String) rawBalance);
         } else {
-            // fallback: intentar toString
             balance = new BigDecimal(rawBalance.toString());
         }
 
-// 2) Precio de publicación (publishPrice puede venir como Double o BigDecimal)
         BigDecimal price;
         if (publishPrice == null) {
             price = BigDecimal.ZERO;
         } else if (publishPrice instanceof BigDecimal) {
             price = (BigDecimal) publishPrice;
         } else if (publishPrice instanceof Number) {
-            // cubre Double, Integer, Long, etc.
             price = BigDecimal.valueOf(((Number) publishPrice).doubleValue());
         } else {
-            // fallback: convertir desde su representación textual
             price = new BigDecimal(publishPrice.toString());
         }
 
-
-
-// comprobar saldo
         if (balance.compareTo(price) < 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Saldo insuficiente para publicar el producto");
         }
 
-// restar y fijar escala a 2 decimales
         BigDecimal newBalance = balance.subtract(price).setScale(2, RoundingMode.HALF_UP);
-
-// persistir (user.balance es BigDecimal)
         user.setBalance(newBalance);
         userRepository.save(user);
 
+        // Registrar transacción en wallet_transactions
+        WalletTransaction tx = WalletTransaction.builder()
+                .user(user)
+                .type("publish")
+                .amount(price.negate()) // monto negativo para reflejar salida
+                .currency("USD")
+                .exchangeApplied(false)
+                .exchangeRate(null)
+                .status("approved")
+                .createdAt(Instant.now())
+                .approvedAt(Instant.now())
+                .approvedBy(user)
+                .description("Publicación de producto: " + product.getName())
+                .build();
 
-        // set publish dates: start = today, end = today + 30 days, days_remaining = days between
+        walletTransactionRepository.save(tx);
+
+        // Fechas de publicación
         LocalDate today = LocalDate.now(ZoneId.systemDefault());
         LocalDate end = today.plusDays(30);
         long daysRemaining = ChronoUnit.DAYS.between(today, end);
+
         product.setActive(true);
         product.setPublishStart(Timestamp.valueOf(today.atStartOfDay()));
         product.setPublishEnd(Timestamp.valueOf(end.atStartOfDay()));
         product.setDaysRemaining((int) Math.max(0, daysRemaining));
 
-        ProductEntity saved = productRepository.save(product);
-
-        return saved;
+        return productRepository.save(product);
     }
 
     private UUID resolveUserIdFromPrincipal(Principal principal) {

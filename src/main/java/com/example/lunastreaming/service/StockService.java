@@ -5,6 +5,7 @@ import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.repository.ProductRepository;
 import com.example.lunastreaming.repository.StockRepository;
 import com.example.lunastreaming.repository.UserRepository;
+import com.example.lunastreaming.util.LunaException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -135,8 +136,6 @@ public class StockService {
         } catch (IllegalArgumentException ex) {
             UserEntity user = userRepository.findByUsername(name)
                     .orElseThrow(() -> new AccessDeniedException("Usuario no encontrado"));
-            // Si tu UserEntity tiene providerId distinto al id, retorna ese campo:
-            // return user.getProviderId();
             return user.getId();
         }
     }
@@ -195,6 +194,40 @@ public class StockService {
         // si necesitas lógica extra (soft delete, auditoría) agrégala aquí
         stockRepository.delete(stock);
     }
+
+    @Transactional
+    public StockResponse setStatus(Long stockId, String newStatus, Principal principal) {
+        // validación básica del nuevo estado (ajusta valores permitidos a tu dominio)
+        final var allowed = Set.of("active", "inactive", "pending", "disabled");
+        if (newStatus == null || !allowed.contains(newStatus.toLowerCase())) {
+            throw new IllegalArgumentException("Estado no válido: " + newStatus);
+        }
+
+        StockEntity stock = stockRepository.findById(stockId)
+                .orElseThrow(() -> new IllegalArgumentException("Stock no encontrado: " + stockId));
+
+        // resolver providerId del principal (reutiliza tu método)
+        UUID requesterProviderId = resolveProviderIdFromPrincipal(principal);
+
+        // resolver providerId desde el product asociado
+        ProductEntity product = stock.getProduct();
+        if (product == null || product.getProviderId() == null) {
+            throw new IllegalStateException("Producto asociado no tiene providerId");
+        }
+        UUID stockProviderId = product.getProviderId();
+
+        // validar ownership o rol admin
+        if (!requesterProviderId.equals(stockProviderId)) {
+            throw new AccessDeniedException("No tienes permiso para cambiar el estado de este stock");
+        }
+
+        // actualizar solo el campo status y persistir
+        stock.setStatus(newStatus.toLowerCase());
+        StockEntity saved = stockRepository.save(stock);
+
+        return stockBuilder.toStockResponse(saved);
+    }
+
 
 
 }

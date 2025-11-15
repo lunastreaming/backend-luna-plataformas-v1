@@ -1,6 +1,7 @@
 package com.example.lunastreaming.controller;
 
 import com.example.lunastreaming.model.BatchCreatedResponse;
+import com.example.lunastreaming.model.PublishRequest;
 import com.example.lunastreaming.model.StockBatchRequest;
 import com.example.lunastreaming.model.StockResponse;
 import com.example.lunastreaming.service.StockService;
@@ -64,7 +65,7 @@ public class StockController {
         return ResponseEntity.ok(stockService.updateStock(id, stock));
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/remove/{id}")
     public ResponseEntity<Void> delete(
             @PathVariable Long id,
             Principal principal) {
@@ -72,6 +73,25 @@ public class StockController {
         stockService.deleteStock(id, principal);
         return ResponseEntity.noContent().build();
     }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<StockResponse> changeStatus(
+            @PathVariable Long id,
+            @RequestBody PublishRequest request,
+            Principal principal) {
+
+        // Validación mínima del body
+        if (request == null || request.getStatus() == null || request.getStatus().trim().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        // pasa principal.getName() al servicio (el servicio resolverá ownership/roles)
+        StockResponse updated = stockService.setStatus(id, request.getStatus().trim(), principal);
+        return ResponseEntity.ok(updated);
+    }
+
+
+
 
 
 }
