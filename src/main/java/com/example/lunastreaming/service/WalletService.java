@@ -2,15 +2,15 @@ package com.example.lunastreaming.service;
 
 
 import com.example.lunastreaming.builder.WalletBuilder;
-import com.example.lunastreaming.model.ExchangeRate;
-import com.example.lunastreaming.model.WalletResponse;
+import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.util.LunaException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
-import com.example.lunastreaming.model.UserEntity;
-import com.example.lunastreaming.model.WalletTransaction;
 import com.example.lunastreaming.repository.UserRepository;
 import com.example.lunastreaming.repository.WalletTransactionRepository;
 import jakarta.transaction.Transactional;
@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.security.Principal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -32,14 +33,14 @@ public class WalletService {
 
     private final WalletTransactionRepository walletTransactionRepository;
 
-    private final UserRepository userRepo;
+    private final UserRepository userRepository;
 
     private final ExchangeRateService exchangeService;
 
     private final WalletBuilder walletBuilder;
 
     public WalletTransaction requestRecharge(UUID userId, BigDecimal amount, boolean isSoles) {
-        UserEntity user = userRepo.findById(userId)
+        UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -92,7 +93,7 @@ public class WalletService {
             throw new IllegalStateException("La transacción ya fue procesada");
         }
 
-        UserEntity approver = userRepo.findById(userId)
+        UserEntity approver = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Admin no encontrado"));
 
         if (!approver.getRole().equalsIgnoreCase("admin")) {
@@ -101,7 +102,7 @@ public class WalletService {
 
         UserEntity user = tx.getUser();
         user.setBalance(user.getBalance().add(tx.getAmount()));
-        userRepo.save(user);
+        userRepository.save(user);
 
         tx.setStatus("approved");
         tx.setApprovedAt(Instant.now());
@@ -119,7 +120,7 @@ public class WalletService {
             throw new IllegalStateException("La transacción ya fue procesada");
         }
 
-        UserEntity approver = userRepo.findById(UUID.fromString(approverUsername))
+        UserEntity approver = userRepository.findById(UUID.fromString(approverUsername))
                 .orElseThrow(() -> new IllegalArgumentException("Admin no encontrado"));
 
         if (!approver.getRole().equalsIgnoreCase("admin")) {
@@ -140,7 +141,7 @@ public class WalletService {
     }
 
     public List<WalletResponse> getAllPendingRecharges(UUID adminId, String role) {
-        UserEntity admin = userRepo.findById(adminId)
+        UserEntity admin = userRepository.findById(adminId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
         if (!"admin".equalsIgnoreCase(admin.getRole())) {
@@ -172,14 +173,14 @@ public class WalletService {
                 isOwner = true;
             }
             // también permitir admin si el principal UUID corresponde a un usuario con rol ADMIN
-            Optional<UserEntity> requesterOpt = userRepo.findById(principalUuid);
+            Optional<UserEntity> requesterOpt = userRepository.findById(principalUuid);
             if (requesterOpt.isPresent()) {
                 UserEntity requester = requesterOpt.get();
                 isAdmin = hasAdminRole(requester);
             }
         } catch (Exception ex) {
             // principalName puede ser username; buscar por username
-            Optional<UserEntity> requesterOpt = userRepo.findByUsername(principalName);
+            Optional<UserEntity> requesterOpt = userRepository.findByUsername(principalName);
             if (requesterOpt.isPresent()) {
                 UserEntity requester = requesterOpt.get();
                 // owner?
@@ -200,9 +201,9 @@ public class WalletService {
         // set approvedBy to requester if resolvable
         try {
             UUID principalUuid = UUID.fromString(principalName);
-            userRepo.findById(principalUuid).ifPresent(tx::setApprovedBy);
+            userRepository.findById(principalUuid).ifPresent(tx::setApprovedBy);
         } catch (Exception ignored) {
-            userRepo.findByUsername(principalName).ifPresent(tx::setApprovedBy);
+            userRepository.findByUsername(principalName).ifPresent(tx::setApprovedBy);
         }
 
         walletTransactionRepository.save(tx);
@@ -218,6 +219,53 @@ public class WalletService {
         List<WalletTransaction> byUserIdAndStatus = walletTransactionRepository.findByUserIdAndStatus(userId, status);
         return byUserIdAndStatus.stream().map(x -> walletBuilder.builderToWalletResponse(x))
                 .toList();
+    }
+
+    public Page<WalletTransactionResponse> listAllTransactionsForAdmin(Principal principal, int page) {
+        UUID adminId = resolveUserIdFromPrincipal(principal);
+
+        UserEntity admin = userRepository.findById(adminId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        // Ajusta a tu comprobación de admin. Ejemplo con role:
+        if (!isAdmin(admin)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Acceso restringido a administradores");
+        }
+
+        // Paginación: page (0-based), size 100
+        Pageable pageable = PageRequest.of(Math.max(0, page), 100);
+        Page<WalletTransaction> pageTx = walletTransactionRepository.findAll(pageable);
+
+        return pageTx.map(this::toResponse);
+    }
+
+    private WalletTransactionResponse toResponse(WalletTransaction tx) {
+        WalletTransactionResponse r = new WalletTransactionResponse();
+        r.setId(tx.getId());
+        r.setUserName(tx.getUser() != null ? tx.getUser().getUsername() : null);
+        // productName / productCode - si tu WalletTransaction no referencia producto, deja null
+        r.setProductName(null);
+        r.setProductCode(null);
+        r.setAmount(tx.getAmount());
+        r.setCurrency(tx.getCurrency());
+        r.setType(tx.getType());
+        r.setDate(tx.getCreatedAt());
+        r.setStatus(tx.getStatus());
+        r.setSettings(tx.getDescription()); // reutilizo description como settings si no hay otro campo
+        r.setDescription(tx.getDescription());
+        r.setApprovedBy(tx.getApprovedBy() != null ? tx.getApprovedBy().getUsername() : null);
+        return r;
+    }
+
+    private UUID resolveUserIdFromPrincipal(Principal principal) {
+        // Implementa según tu autent. Por ejemplo: UUID.fromString(((OAuth2AuthenticationToken)principal).getName())
+        return UUID.fromString(principal.getName());
+    }
+
+    private boolean isAdmin(UserEntity user) {
+        // Ajusta según tu UserEntity: ejemplo simple:
+        String role = user.getRole(); // o user.getRoles() etc.
+        return "ADMIN".equalsIgnoreCase(role);
     }
 
 

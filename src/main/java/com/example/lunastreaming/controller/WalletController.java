@@ -3,9 +3,11 @@ package com.example.lunastreaming.controller;
 import com.example.lunastreaming.model.RechargeRequest;
 import com.example.lunastreaming.model.WalletResponse;
 import com.example.lunastreaming.model.WalletTransaction;
+import com.example.lunastreaming.model.WalletTransactionResponse;
 import com.example.lunastreaming.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -82,5 +84,17 @@ public class WalletController {
         List<WalletResponse> transactions = walletService.getUserTransactionsByStatus(userId, normalizedStatus);
         return ResponseEntity.ok(transactions);
     }
+
+    //Traer para el admin todos los valores
+
+    @GetMapping("/transactions")
+    public ResponseEntity<Page<WalletTransactionResponse>> listTransactions(
+            Principal principal,
+            @RequestParam(name = "page", defaultValue = "0") int page
+    ) {
+        Page<WalletTransactionResponse> result = walletService.listAllTransactionsForAdmin(principal, page);
+        return ResponseEntity.ok(result);
+    }
+
 
 }

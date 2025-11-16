@@ -175,7 +175,7 @@ public class ProductService {
         if (existing.getActive() == null) existing.setActive(Boolean.TRUE);
         if (existing.getIsRenewable() == null) existing.setIsRenewable(Boolean.FALSE);
         if (existing.getIsOnRequest() == null) existing.setIsOnRequest(Boolean.FALSE);
-        if (existing.getSalePrice() == null) existing.setSalePrice(0L);
+        if (existing.getSalePrice() == null) existing.setSalePrice(BigDecimal.ZERO);
         if (existing.getCreatedAt() == null) existing.setCreatedAt(Instant.now());
         // updatedAt será cambiado por @PreUpdate
 
@@ -367,18 +367,30 @@ public class ProductService {
         // 4) cargar stocks por productIds y agrupar por productId
         List<StockEntity> stockRows = productIds.isEmpty()
                 ? Collections.emptyList()
-                : stockRepository.findByProductIdIn(productIds);
+                : stockRepository.findByProductIdIn(productIds).stream()
+                .filter(Objects::nonNull)
+                .filter(s -> {
+                    // mantener sólo stocks que estén "active" o publicados
+                    String status = null;
+                    try { status = s.getStatus(); } catch (Exception ignored) {}
+                    Boolean published = null;
+                    try {
+                        // si existe getPublished()
+                        Object p = s.getClass().getMethod("getPublished").invoke(s);
+                        if (p instanceof Boolean) published = (Boolean) p;
+                    } catch (Exception ignored) {}
+                    return ("active".equalsIgnoreCase(status)) || Boolean.TRUE.equals(published);
+                })
+                .collect(Collectors.toList());
 
         Map<UUID, List<StockEntity>> stocksByProduct = stockRows.stream()
-                .filter(Objects::nonNull)
                 .collect(Collectors.groupingBy(s -> {
-                    // intenta extraer productId desde campo directo o relación
                     try {
                         if (s.getProduct() != null && s.getProduct().getId() != null) return s.getProduct().getId();
                     } catch (Exception ignored) {}
                     try {
-                        // si StockEntity tiene getProductId()
-                        return (UUID) s.getClass().getMethod("getProductId").invoke(s);
+                        Object pid = s.getClass().getMethod("getProductId").invoke(s);
+                        if (pid instanceof UUID) return (UUID) pid;
                     } catch (Exception ignored) {}
                     return null;
                 }))
@@ -441,16 +453,26 @@ public class ProductService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(UserEntity::getId, Function.identity(), (a, b) -> a));
 
-        // Cargar stocks en bloque y agrupar por productId
+        // Cargar stocks en bloque y agrupar por productId (filtrando sólo active)
         List<StockEntity> stockRows = productIds.isEmpty()
                 ? Collections.emptyList()
-                : stockRepository.findByProductIdIn(productIds);
+                : stockRepository.findByProductIdIn(productIds).stream()
+                .filter(Objects::nonNull)
+                .filter(s -> {
+                    String status = null;
+                    try { status = s.getStatus(); } catch (Exception ignored) {}
+                    Boolean published = null;
+                    try {
+                        Object p = s.getClass().getMethod("getPublished").invoke(s);
+                        if (p instanceof Boolean) published = (Boolean) p;
+                    } catch (Exception ignored) {}
+                    return ("active".equalsIgnoreCase(status)) || Boolean.TRUE.equals(published);
+                })
+                .collect(Collectors.toList());
 
         Map<UUID, List<StockEntity>> stocksByProduct = stockRows.stream()
-                .filter(Objects::nonNull)
                 .collect(Collectors.groupingBy(s -> {
                     if (s.getProduct() != null && s.getProduct().getId() != null) return s.getProduct().getId();
-                    // si tu StockEntity tiene getProductId()
                     try {
                         Object pid = s.getClass().getMethod("getProductId").invoke(s);
                         if (pid instanceof UUID) return (UUID) pid;
@@ -474,7 +496,6 @@ public class ProductService {
         // Construir responses sin llamadas adicionales al repo dentro del map
         List<ProductResponse> responses = page.stream()
                 .map(entity -> {
-                    // usar la variable ya calculada
                     String categoryName = categoryNameForFilter != null
                             ? categoryNameForFilter
                             : (entity.getCategoryId() == null ? null : categoryRepository.findById(entity.getCategoryId()).map(CategoryEntity::getName).orElse(null));

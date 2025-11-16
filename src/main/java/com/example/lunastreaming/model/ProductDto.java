@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.UUID;
@@ -35,9 +36,9 @@ public class ProductDto {
 
     private Integer days;
 
-    private Long salePrice;
+    private BigDecimal salePrice;
 
-    private Long renewalPrice;
+    private BigDecimal renewalPrice;
 
     private Boolean isRenewable;
 
@@ -57,7 +58,7 @@ public class ProductDto {
 
     private Integer daysRemaining;
 
-    public ProductDto(java.util.UUID id, String name, Integer categoryId, String categoryName, Long salePrice, Integer daysRemaining) {
+    public ProductDto(java.util.UUID id, String name, Integer categoryId, String categoryName, BigDecimal salePrice, Integer daysRemaining) {
         this.id = id;
         this.name = name;
         this.categoryId = categoryId;

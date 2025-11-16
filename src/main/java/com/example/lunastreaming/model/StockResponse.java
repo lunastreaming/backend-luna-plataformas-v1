@@ -3,6 +3,8 @@ package com.example.lunastreaming.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 @Builder
@@ -25,5 +27,21 @@ public class StockResponse {
     private String status;
     private ProductEntity product;
     private String pin;
+
+    // Nuevos campos
+    private Instant soldAt;
+    private UUID buyerId;
+    private String buyerUsername;
+    private String clientName;
+    private String clientPhone;
+    private Boolean published;
+
+    private BigDecimal refund;
+    private Instant startAt;
+    private Instant endAt;
+
+    private String providerName;
+    private String providerPhone;
+
 
 }

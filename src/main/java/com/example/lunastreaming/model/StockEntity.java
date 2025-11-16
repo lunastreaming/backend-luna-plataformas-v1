@@ -3,6 +3,9 @@ package com.example.lunastreaming.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.sql.Timestamp;
+import java.time.Instant;
+
 @Entity
 @Table(name = "stock")
 @Builder
@@ -30,4 +33,27 @@ public class StockEntity {
     private Integer numeroPerfil;
     private String pin;
     private String status;
+
+    // 🆕 Nuevos campos para compra/venta
+
+    @Column(name = "sold_at")
+    private Timestamp soldAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "buyer_id")
+    private UserEntity buyer;
+
+    @Column(name = "client_name")
+    private String clientName;
+
+    @Column(name = "client_phone")
+    private String clientPhone;
+
+    @Column(name = "start_at")
+    private Instant startAt;
+
+    @Column(name = "end_at")
+    private Instant endAt;
+
+
 }

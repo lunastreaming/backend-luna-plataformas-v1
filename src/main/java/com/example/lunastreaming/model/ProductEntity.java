@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.UuidGenerator;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.UUID;
@@ -44,11 +45,11 @@ public class ProductEntity {
     @Column(name = "days")
     private Integer days;
 
-    @Column(name = "sale_price", nullable = false)
-    private Long salePrice;
+    @Column(name = "sale_price", precision = 12, scale = 2, nullable = false)
+    private BigDecimal salePrice;
 
-    @Column(name = "renewal_price")
-    private Long renewalPrice;
+    @Column(name = "renewal_price", precision = 12, scale = 2)
+    private BigDecimal renewalPrice;
 
     @Column(name = "is_renewable", nullable = false)
     private Boolean isRenewable = false;

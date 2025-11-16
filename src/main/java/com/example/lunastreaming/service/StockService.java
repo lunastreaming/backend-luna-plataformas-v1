@@ -5,21 +5,34 @@ import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.repository.ProductRepository;
 import com.example.lunastreaming.repository.StockRepository;
 import com.example.lunastreaming.repository.UserRepository;
-import com.example.lunastreaming.util.LunaException;
+import com.example.lunastreaming.repository.WalletTransactionRepository;
+import com.example.lunastreaming.util.RequestUtil;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.security.Principal;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static com.example.lunastreaming.util.PaginationUtil.toPagedResponse;
 
 @Service
 @RequiredArgsConstructor
 public class StockService {
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final StockRepository stockRepository;
 
@@ -28,6 +41,11 @@ public class StockService {
     private final StockBuilder stockBuilder;
 
     private final UserRepository userRepository;
+
+    private final WalletTransactionRepository walletTransactionRepository;
+
+    private final PasswordEncoder passwordEncoder;
+
 
     public List<StockResponse> getByProviderPrincipal(String principalName) {
         // si principalName es UUID:
@@ -228,6 +246,197 @@ public class StockService {
         return stockBuilder.toStockResponse(saved);
     }
 
+    //Comprar o vender stock
 
+    @Transactional
+    public StockResponse purchaseProduct(UUID productId, PurchaseRequest req, Principal principal) {
+        UUID buyerId = resolveUserIdFromPrincipal(principal);
+
+        // Buscar usuario comprador
+        UserEntity buyer = userRepository.findById(buyerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comprador no encontrado"));
+
+        // 🔐 Validación de contraseña al inicio
+        if (!passwordEncoder.matches(req.getPassword(), buyer.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña ingresada es incorrecta");
+        }
+
+        // Buscar un stock activo del producto
+        StockEntity stock = stockRepository.findFirstByProductIdAndStatus(productId, "active")
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No hay stock activo disponible"));
+
+        ProductEntity product = stock.getProduct();
+        if (product == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Producto no asociado");
+        }
+
+        BigDecimal price = product.getSalePrice();
+
+        // Validar saldo
+        if (buyer.getBalance().compareTo(price) < 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Saldo insuficiente");
+        }
+
+        // Descontar saldo del comprador
+        buyer.setBalance(buyer.getBalance().subtract(price));
+        userRepository.save(buyer);
+
+        // Registrar transacción de compra
+        walletTransactionRepository.save(WalletTransaction.builder()
+                .user(buyer)
+                .type("purchase")
+                .amount(price.negate())
+                .currency("USD")
+                .status("approved")
+                .createdAt(Instant.now())
+                .approvedAt(Instant.now())
+                .description("Compra de stock del producto: " + product.getName())
+                .exchangeApplied(false)
+                .build());
+
+        // Acreditar saldo al proveedor
+        UserEntity provider = userRepository.findById(product.getProviderId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
+
+        provider.setBalance(provider.getBalance().add(price));
+        userRepository.save(provider);
+
+        // Registrar transacción de venta
+        walletTransactionRepository.save(WalletTransaction.builder()
+                .user(provider)
+                .type("sale")
+                .amount(price)
+                .currency("USD")
+                .status("approved")
+                .createdAt(Instant.now())
+                .approvedAt(Instant.now())
+                .description("Venta de stock del producto: " + product.getName())
+                .exchangeApplied(false)
+                .build());
+
+        // Marcar stock como vendido y guardar campos de cliente
+        stock.setBuyer(buyer);
+
+        // fechas: startAt = ahora, endAt = startAt + product.days
+        Instant now = Instant.now();
+        stock.setStartAt(now);
+
+        Integer days = product.getDays() == null ? 0 : product.getDays();
+        if (days > 0) {
+            Instant endInstant = now.plus(days, ChronoUnit.DAYS);
+            stock.setEndAt(endInstant);
+        } else {
+            stock.setEndAt(null);
+        }
+
+        // guardar monto pagado en stock si tienes ese campo (recomendado)
+        // stock.setPaidAmount(price);
+
+        stock.setSoldAt(Timestamp.from(now));
+        stock.setClientName(req.getClientName());
+        stock.setClientPhone(req.getClientPhone());
+        stock.setStatus("sold");
+        stockRepository.save(stock);
+
+        return stockBuilder.toStockResponse(stock);
+    }
+
+
+    public UUID resolveUserIdFromPrincipal(Principal principal) {
+        if (principal == null || principal.getName() == null) {
+            throw new AccessDeniedException("Principal no presente");
+        }
+
+        String name = principal.getName();
+
+        try {
+            // Si el principal ya contiene el UUID directamente
+            return UUID.fromString(name);
+        } catch (IllegalArgumentException ex) {
+            // Si no es UUID, buscar por username
+            UserEntity user = userRepository.findByUsername(name)
+                    .orElseThrow(() -> new AccessDeniedException("Usuario no encontrado: " + name));
+            return user.getId(); // o user.getProviderId() si aplica
+        }
+    }
+
+    /**
+     * Lista los stocks que compró el usuario autenticado (buyer).
+     *
+     * @param principal usuario autenticado
+     * @param q         texto de búsqueda (product name)
+     * @param page      página (0-based)
+     * @param size      tamaño de página
+     * @param sort      especificador de orden (ej: "soldAt,desc;productName,asc")
+     */
+    public PagedResponse<StockResponse> listPurchases(Principal principal, String q, int page, int size, String sort) {
+        UUID buyerId = resolveUserIdFromPrincipal(principal);
+
+        Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
+
+        Page<StockEntity> p = stockRepository.findByBuyerIdPaged(buyerId, pageable);
+
+        // reunir providerIds únicos que aparecen en esta página
+        Set<UUID> providerIds = p.stream()
+                .map(StockEntity::getProduct)
+                .filter(Objects::nonNull)
+                .map(ProductEntity::getProviderId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // cargar todos los providers en batch y mapear por id -> UserEntity
+        final Map<UUID, UserEntity> providersById = providerIds.isEmpty()
+                ? Collections.emptyMap()
+                : userRepository.findAllById(providerIds).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(UserEntity::getId, Function.identity()));
+
+        // mapear cada stock a StockResponse y enriquecer con providerName y providerPhone
+        Page<StockResponse> mapped = p.map(stock -> {
+            StockResponse dto = stockBuilder.toStockResponse(stock);
+
+            ProductEntity prod = stock.getProduct();
+            if (prod != null) {
+                UUID provId = prod.getProviderId();
+                if (provId != null) {
+                    UserEntity prov = providersById.get(provId);
+                    if (prov != null) {
+                        // suponiendo que tu UserEntity tiene getUsername() y getPhone()
+                        dto.setProviderName(prov.getUsername());
+                        dto.setProviderPhone(prov.getPhone());
+                    } else {
+                        dto.setProviderName(null);
+                        dto.setProviderPhone(null);
+                    }
+                }
+            }
+
+            return dto;
+        });
+
+        return toPagedResponse(mapped);
+    }
+
+
+    /**
+     * Lista las ventas (stocks vendidos) del proveedor autenticado.
+     *
+     * @param principal usuario autenticado (proveedor)
+     * @param q         texto de búsqueda (product name)
+     * @param page      página (0-based)
+     * @param size      tamaño de página
+     * @param sort      especificador de orden
+     */
+    public PagedResponse<StockResponse> listProviderSales(Principal principal, String q, int page, int size, String sort) {
+        UUID providerId = resolveUserIdFromPrincipal(principal);
+
+        Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
+        String normalizedQ = RequestUtil.emptyToNull(q);
+
+        Page<StockEntity> p = stockRepository.findSalesByProviderIdPaged(providerId, normalizedQ, pageable);
+
+        Page<StockResponse> mapped = p.map(stockBuilder::toStockResponse);
+        return toPagedResponse(mapped);
+    }
 
 }

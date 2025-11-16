@@ -1,9 +1,6 @@
 package com.example.lunastreaming.controller;
 
-import com.example.lunastreaming.model.BatchCreatedResponse;
-import com.example.lunastreaming.model.PublishRequest;
-import com.example.lunastreaming.model.StockBatchRequest;
-import com.example.lunastreaming.model.StockResponse;
+import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.service.StockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -90,7 +87,51 @@ public class StockController {
         return ResponseEntity.ok(updated);
     }
 
+    //Endpoint para comprar un stock
 
+    @PostMapping("/products/{productId}/purchase")
+    public ResponseEntity<StockResponse> purchaseProduct(
+            @PathVariable UUID productId,
+            @RequestBody PurchaseRequest request,
+            Principal principal
+    ) {
+        StockResponse result = stockService.purchaseProduct(productId, request, principal);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Lista los stocks que compró el usuario autenticado (buyer)
+     * Query params:
+     *  - q: búsqueda por nombre de producto (opcional)
+     *  - page: número de página (0)
+     *  - size: tamaño (20)
+     *  - sort: "soldAt,desc" o "productName,asc" (opcional)
+     */
+    @GetMapping("/purchases")
+    public PagedResponse<StockResponse> listPurchases(
+            Principal principal,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sort
+    ) {
+        return stockService.listPurchases(principal, q, page, size, sort);
+    }
+
+    /**
+     * Lista las ventas (stocks vendidos) del proveedor autenticado
+     * Query params iguales al endpoint de compras.
+     */
+    @GetMapping("/provider/sales")
+    public PagedResponse<StockResponse> listProviderSales(
+            Principal principal,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sort
+    ) {
+        return stockService.listProviderSales(principal, q, page, size, sort);
+    }
 
 
 
