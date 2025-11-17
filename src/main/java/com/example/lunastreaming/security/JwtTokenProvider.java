@@ -25,7 +25,7 @@ public class JwtTokenProvider {
 
     // inyecta secret y opcionalmente la validez (milisegundos)
     public JwtTokenProvider(@Value("${app.jwt.secret:}") String jwtSecretProp,
-                            @Value("${app.jwt.validity-ms:900000}") long validityMs) {
+                            @Value("${app.jwt.validity-ms:43200000}") long validityMs) {
         this.jwtSecretProp = jwtSecretProp;
         this.validityMs = validityMs;
     }

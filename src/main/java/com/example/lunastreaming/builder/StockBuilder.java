@@ -48,7 +48,12 @@ public class StockBuilder {
             refund = computeRefund(productPrice, productPrice, productDays, stockEntity.getEndAt(), BigDecimal.ZERO);
         }
 
-
+        // calcular daysRemaining y daysPublished
+        Integer daysRemaining = null;
+        if (stockEntity.getEndAt() != null) {
+            daysRemaining = computeDaysBetween(Instant.now(), stockEntity.getEndAt(), true);
+            if (daysRemaining < 0) daysRemaining = 0;
+        }
 
         return StockResponse
                 .builder()
@@ -70,6 +75,7 @@ public class StockBuilder {
                 .clientPhone(stockEntity.getClientPhone())
                 .startAt(stockEntity.getStartAt())
                 .endAt(stockEntity.getEndAt())
+                .daysRemaining(daysRemaining)
                 .refund(refund)
                 .build();
     }
@@ -119,6 +125,19 @@ public class StockBuilder {
     }
 
 
+    private Integer computeDaysBetween(final Instant from, final Instant to, final boolean ceilPositive) {
+        if (from == null || to == null) return null;
+        long seconds = ChronoUnit.SECONDS.between(from, to);
+        if (seconds == 0) return 0;
+        double days = (double) seconds / SECONDS_PER_DAY;
+        if (ceilPositive) {
+            long ceil = (long) Math.ceil(days);
+            return Math.toIntExact(Math.max(0, ceil));
+        } else {
+            long floor = (long) Math.floor(days);
+            return Math.toIntExact(Math.max(0, floor));
+        }
+    }
 
 
 }

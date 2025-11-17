@@ -1,9 +1,6 @@
 package com.example.lunastreaming.controller;
 
-import com.example.lunastreaming.model.RechargeRequest;
-import com.example.lunastreaming.model.WalletResponse;
-import com.example.lunastreaming.model.WalletTransaction;
-import com.example.lunastreaming.model.WalletTransactionResponse;
+import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -95,6 +92,17 @@ public class WalletController {
         Page<WalletTransactionResponse> result = walletService.listAllTransactionsForAdmin(principal, page);
         return ResponseEntity.ok(result);
     }
+
+
+    //retiros de proveedores
+
+    @PostMapping("/provider/withdraw")
+    public ResponseEntity<?> requestWithdrawal(@RequestBody WithdrawalRequest req, Principal principal) {
+        UUID userId = UUID.fromString(principal.getName()); // o extraer desde JWT
+        WalletTransaction tx = walletService.requestWithdrawal(userId, req.getAmount());
+        return ResponseEntity.ok(tx);
+    }
+
 
 
 }

@@ -35,16 +35,20 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
 
     // Ventas de un proveedor: producto cuyo providerId = :providerId y status = 'sold'
     @Query("""
-        SELECT s FROM StockEntity s
-        JOIN FETCH s.product p
-        LEFT JOIN FETCH s.buyer b
-        WHERE p.providerId = :providerId
-          AND s.status = 'sold'
-          AND (:q IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')))
-    """)
-    Page<StockEntity> findSalesByProviderIdPaged(@Param("providerId") UUID providerId,
-                                                 @Param("q") String q,
-                                                 Pageable pageable);
+  SELECT s
+  FROM StockEntity s
+  JOIN s.product p
+  LEFT JOIN s.buyer b
+  WHERE p.providerId = :providerId
+    AND s.status = 'sold'
+  ORDER BY s.soldAt DESC
+""")
+    Page<StockEntity> findSalesByProviderIdPaged(
+            @Param("providerId") UUID providerId,
+            Pageable pageable
+    );
+
+
 
     // Busca el primer stock activo de un producto
     Optional<StockEntity> findFirstByProductIdAndStatus(UUID productId, String status);

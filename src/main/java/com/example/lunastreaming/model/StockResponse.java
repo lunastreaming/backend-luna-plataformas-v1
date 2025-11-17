@@ -40,6 +40,8 @@ public class StockResponse {
     private Instant startAt;
     private Instant endAt;
 
+    private Integer daysRemaining;
+
     private String providerName;
     private String providerPhone;
 

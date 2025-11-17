@@ -22,4 +22,17 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
 
     Page<WalletTransaction> findAll(Pageable pageable);
 
+    // devuelve todas las transacciones cuyo user.role = :role, status = :status y type en :types
+    @Query("""
+  SELECT wt
+  FROM WalletTransaction wt
+  WHERE wt.status = :status
+    AND wt.type IN :types
+    AND wt.user.role = :role
+  ORDER BY wt.createdAt DESC
+""")
+    List<WalletTransaction> findByStatusAndUserRoleAndTypes(@Param("status") String status,
+                                                            @Param("role") String role,
+                                                            @Param("types") List<String> types);
+
 }

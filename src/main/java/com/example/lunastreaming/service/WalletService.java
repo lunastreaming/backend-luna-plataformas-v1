@@ -85,24 +85,44 @@ public class WalletService {
 
     @Transactional
     public WalletTransaction approveRecharge(UUID txId, String approverUsername) {
-        UUID userId = UUID.fromString(approverUsername);
+        UUID approverId = UUID.fromString(approverUsername);
         WalletTransaction tx = walletTransactionRepository.findById(txId)
                 .orElseThrow(() -> new IllegalArgumentException("Transacción no encontrada"));
 
-        if (!tx.getStatus().equals("pending")) {
+        if (!"pending".equalsIgnoreCase(tx.getStatus())) {
             throw new IllegalStateException("La transacción ya fue procesada");
         }
 
-        UserEntity approver = userRepository.findById(userId)
+        UserEntity approver = userRepository.findById(approverId)
                 .orElseThrow(() -> new IllegalArgumentException("Admin no encontrado"));
 
-        if (!approver.getRole().equalsIgnoreCase("admin")) {
+        if (!"admin".equalsIgnoreCase(approver.getRole())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
         }
 
         UserEntity user = tx.getUser();
-        user.setBalance(user.getBalance().add(tx.getAmount()));
-        userRepository.save(user);
+        BigDecimal userBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
+        BigDecimal txAmount = tx.getAmount() != null ? tx.getAmount() : BigDecimal.ZERO;
+
+        switch (tx.getType() == null ? "" : tx.getType().toLowerCase()) {
+            case "recharge":
+                // acreditar monto
+                user.setBalance(userBalance.add(txAmount));
+                userRepository.save(user);
+                break;
+
+            case "withdrawal":
+                // validar saldo suficiente y debitar
+                if (userBalance.compareTo(txAmount) < 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Saldo insuficiente para aprobar este retiro");
+                }
+                user.setBalance(userBalance.subtract(txAmount));
+                userRepository.save(user);
+                break;
+
+            default:
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de transacción no soportado: " + tx.getType());
+        }
 
         tx.setStatus("approved");
         tx.setApprovedAt(Instant.now());
@@ -111,19 +131,21 @@ public class WalletService {
         return walletTransactionRepository.save(tx);
     }
 
+
     @Transactional
     public WalletTransaction rejectRecharge(UUID txId, String approverUsername) {
+        UUID approverId = UUID.fromString(approverUsername);
         WalletTransaction tx = walletTransactionRepository.findById(txId)
                 .orElseThrow(() -> new IllegalArgumentException("Transacción no encontrada"));
 
-        if (!tx.getStatus().equals("pending")) {
+        if (!"pending".equalsIgnoreCase(tx.getStatus())) {
             throw new IllegalStateException("La transacción ya fue procesada");
         }
 
-        UserEntity approver = userRepository.findById(UUID.fromString(approverUsername))
+        UserEntity approver = userRepository.findById(approverId)
                 .orElseThrow(() -> new IllegalArgumentException("Admin no encontrado"));
 
-        if (!approver.getRole().equalsIgnoreCase("admin")) {
+        if (!"admin".equalsIgnoreCase(approver.getRole())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
         }
 
@@ -133,6 +155,7 @@ public class WalletService {
 
         return walletTransactionRepository.save(tx);
     }
+
 
     public List<WalletResponse> getUserPendingRecharges(UUID userId) {
         List<WalletTransaction> pending = walletTransactionRepository.findByUserIdAndStatus(userId, "pending");
@@ -148,8 +171,13 @@ public class WalletService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
         }
 
-        List<WalletTransaction> pendings = walletTransactionRepository.findByStatusAndUserRole("pending", role);
-        return pendings.stream().map(x -> walletBuilder.builderToWalletResponse(x)).toList();
+        List<String> types = List.of("recharge", "withdrawal"); // ajustar si necesitas más
+        List<WalletTransaction> pendings = walletTransactionRepository
+                .findByStatusAndUserRoleAndTypes("pending", role, types);
+
+        return pendings.stream()
+                .map(walletBuilder::builderToWalletResponse)
+                .toList();
     }
 
 
@@ -267,6 +295,57 @@ public class WalletService {
         String role = user.getRole(); // o user.getRoles() etc.
         return "ADMIN".equalsIgnoreCase(role);
     }
+
+    @Transactional
+    public WalletTransaction requestWithdrawal(UUID userId, BigDecimal amount) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Monto inválido");
+        }
+
+        BigDecimal finalAmountUsd = amount;
+        BigDecimal rate = null;
+        boolean isSoles = false;
+
+        if (isSoles) {
+            ExchangeRate currentRate = exchangeService.getCurrentRate();
+            if (currentRate == null || currentRate.getRate() == null) {
+                throw new IllegalStateException("Tipo de cambio no disponible");
+            }
+            rate = currentRate.getRate();
+            if (rate.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalStateException("Tipo de cambio inválido: " + rate);
+            }
+            // Convierto PEN a USD: USD = PEN / (PEN per USD)
+            finalAmountUsd = amount.divide(rate, 2, RoundingMode.HALF_UP);
+        } else {
+            finalAmountUsd = amount.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        // Validación de saldo disponible (asumimos user.getBalance() está en USD)
+        BigDecimal userBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
+        if (userBalance.compareTo(finalAmountUsd) < 0) {
+            throw new IllegalArgumentException("Saldo insuficiente para retirar");
+        }
+
+        WalletTransaction tx = WalletTransaction.builder()
+                .user(user)
+                .type("withdrawal")   // tipo withdrawal ya contemplado en BD
+                .amount(finalAmountUsd)
+                .currency("USD")
+                .exchangeApplied(isSoles)
+                .exchangeRate(rate)
+                .status("pending")    // se crea como pending, luego administrador lo aprobará
+                .createdAt(Instant.now())
+                .description("Withdrawal request")
+                .exchangeApplied(false)
+                .build();
+
+        return walletTransactionRepository.save(tx);
+    }
+
 
 
 

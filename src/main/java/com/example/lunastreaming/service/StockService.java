@@ -431,9 +431,8 @@ public class StockService {
         UUID providerId = resolveUserIdFromPrincipal(principal);
 
         Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
-        String normalizedQ = RequestUtil.emptyToNull(q);
 
-        Page<StockEntity> p = stockRepository.findSalesByProviderIdPaged(providerId, normalizedQ, pageable);
+        Page<StockEntity> p = stockRepository.findSalesByProviderIdPaged(providerId, pageable);
 
         Page<StockResponse> mapped = p.map(stockBuilder::toStockResponse);
         return toPagedResponse(mapped);

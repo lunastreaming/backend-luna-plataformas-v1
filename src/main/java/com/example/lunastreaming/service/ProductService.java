@@ -324,7 +324,7 @@ public class ProductService {
      * Devuelve Page<ProductDto>.
      */
     @Transactional(readOnly = true)
-    public Page<ProductResponse> listActiveProductsWithDetails(Pageable pageable) {
+    public Page<ProductHomeResponse> listActiveProductsWithDetails(Pageable pageable) {
         Page<ProductEntity> page = productRepository.findByActiveTrue(pageable);
 
         if (page.isEmpty()) {
@@ -364,7 +364,7 @@ public class ProductService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(UserEntity::getId, Function.identity(), (a, b) -> a));
 
-        // 4) cargar stocks por productIds y agrupar por productId
+        // 4) cargar stocks por productIds y filtrar sólo stocks "disponibles"
         List<StockEntity> stockRows = productIds.isEmpty()
                 ? Collections.emptyList()
                 : stockRepository.findByProductIdIn(productIds).stream()
@@ -375,7 +375,6 @@ public class ProductService {
                     try { status = s.getStatus(); } catch (Exception ignored) {}
                     Boolean published = null;
                     try {
-                        // si existe getPublished()
                         Object p = s.getClass().getMethod("getPublished").invoke(s);
                         if (p instanceof Boolean) published = (Boolean) p;
                     } catch (Exception ignored) {}
@@ -383,6 +382,7 @@ public class ProductService {
                 })
                 .collect(Collectors.toList());
 
+        // agrupar por productId
         Map<UUID, List<StockEntity>> stocksByProduct = stockRows.stream()
                 .collect(Collectors.groupingBy(s -> {
                     try {
@@ -398,8 +398,8 @@ public class ProductService {
                 .filter(e -> e.getKey() != null)
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-        // 5) mapear a ProductResponse
-        List<ProductResponse> responses = page.stream()
+        // 5) mapear a ProductWithStockCountResponse
+        List<ProductHomeResponse> responses = page.stream()
                 .map(entity -> {
                     String categoryName = entity.getCategoryId() == null ? null : categoryNames.get(entity.getCategoryId());
                     UserEntity provider = entity.getProviderId() == null ? null : providersById.get(entity.getProviderId());
@@ -408,25 +408,24 @@ public class ProductService {
                     ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName);
 
                     List<StockEntity> stockForProduct = stocksByProduct.getOrDefault(entity.getId(), Collections.emptyList());
-                    List<StockResponse> stockResponses = stockForProduct.stream()
-                            .map(stockBuilder::toStockResponse)
-                            .collect(Collectors.toList());
+                    long stockCount = stockForProduct.size();
 
-                    return ProductResponse.builder()
+                    return ProductHomeResponse.builder()
                             .product(dto)
-                            .stockResponses(stockResponses)
+                            .availableStockCount(stockCount)
                             .build();
                 })
                 .collect(Collectors.toList());
 
         return new PageImpl<>(responses, pageable, page.getTotalElements());
+
     }
 
     /**
      * Igual que el anterior pero filtrando por categoryId; devuelve Page<ProductResponse>.
      */
     @Transactional(readOnly = true)
-    public Page<ProductResponse> listActiveProductsByCategoryWithDetails(Integer categoryId, Pageable pageable) {
+    public Page<ProductHomeResponse> listActiveProductsByCategoryWithDetails(Integer categoryId, Pageable pageable) {
         Page<ProductEntity> page = productRepository.findByActiveTrueAndCategoryId(categoryId, pageable);
 
         if (page.isEmpty()) {
@@ -453,7 +452,7 @@ public class ProductService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(UserEntity::getId, Function.identity(), (a, b) -> a));
 
-        // Cargar stocks en bloque y agrupar por productId (filtrando sólo active)
+        // Cargar stocks en bloque y filtrar sólo "disponibles" (same predicate as before)
         List<StockEntity> stockRows = productIds.isEmpty()
                 ? Collections.emptyList()
                 : stockRepository.findByProductIdIn(productIds).stream()
@@ -470,15 +469,18 @@ public class ProductService {
                 })
                 .collect(Collectors.toList());
 
-        Map<UUID, List<StockEntity>> stocksByProduct = stockRows.stream()
+        // Agrupar por productId y contar
+        Map<UUID, Long> stockCountByProduct = stockRows.stream()
                 .collect(Collectors.groupingBy(s -> {
-                    if (s.getProduct() != null && s.getProduct().getId() != null) return s.getProduct().getId();
+                    try {
+                        if (s.getProduct() != null && s.getProduct().getId() != null) return s.getProduct().getId();
+                    } catch (Exception ignored) {}
                     try {
                         Object pid = s.getClass().getMethod("getProductId").invoke(s);
                         if (pid instanceof UUID) return (UUID) pid;
                     } catch (Exception ignored) {}
                     return null;
-                }))
+                }, Collectors.counting()))
                 .entrySet().stream()
                 .filter(e -> e.getKey() != null)
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -494,7 +496,7 @@ public class ProductService {
         }
 
         // Construir responses sin llamadas adicionales al repo dentro del map
-        List<ProductResponse> responses = page.stream()
+        List<ProductHomeResponse> responses = page.stream()
                 .map(entity -> {
                     String categoryName = categoryNameForFilter != null
                             ? categoryNameForFilter
@@ -505,19 +507,17 @@ public class ProductService {
 
                     ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName);
 
-                    List<StockEntity> stockForProduct = stocksByProduct.getOrDefault(entity.getId(), Collections.emptyList());
-                    List<StockResponse> stockResponses = stockForProduct.stream()
-                            .map(stockBuilder::toStockResponse)
-                            .collect(Collectors.toList());
+                    long stockCount = stockCountByProduct.getOrDefault(entity.getId(), 0L);
 
-                    return ProductResponse.builder()
+                    return ProductHomeResponse.builder()
                             .product(dto)
-                            .stockResponses(stockResponses)
+                            .availableStockCount(stockCount)
                             .build();
                 })
                 .collect(Collectors.toList());
 
         return new PageImpl<>(responses, pageable, page.getTotalElements());
+
     }
 
     private String resolveProviderDisplayName(UserEntity user) {
