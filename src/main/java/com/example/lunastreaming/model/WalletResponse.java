@@ -34,4 +34,7 @@ public class WalletResponse {
     private Instant approvedAt;
 
     private String description;
+
+    private BigDecimal realAmount;
+
 }

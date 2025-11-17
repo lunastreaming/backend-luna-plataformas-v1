@@ -25,5 +25,6 @@ public class WalletTransactionResponse {
     private String settings;        // Setting (serializado si aplica)
     private String description;
     private String approvedBy;      // username del aprobador si existe
+    private BigDecimal realAmount;  // Monto con el descuento
 
 }

@@ -39,6 +39,8 @@ public class WalletService {
 
     private final WalletBuilder walletBuilder;
 
+    private final SettingService settingService;
+
     public WalletTransaction requestRecharge(UUID userId, BigDecimal amount, boolean isSoles) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
@@ -86,10 +88,10 @@ public class WalletService {
     @Transactional
     public WalletTransaction approveRecharge(UUID txId, String approverUsername) {
         UUID approverId = UUID.fromString(approverUsername);
-        WalletTransaction tx = walletTransactionRepository.findById(txId)
+        WalletTransaction userWallet = walletTransactionRepository.findById(txId)
                 .orElseThrow(() -> new IllegalArgumentException("Transacción no encontrada"));
 
-        if (!"pending".equalsIgnoreCase(tx.getStatus())) {
+        if (!"pending".equalsIgnoreCase(userWallet.getStatus())) {
             throw new IllegalStateException("La transacción ya fue procesada");
         }
 
@@ -100,35 +102,41 @@ public class WalletService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
         }
 
-        UserEntity user = tx.getUser();
+        UserEntity user = userWallet.getUser();
         BigDecimal userBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
-        BigDecimal txAmount = tx.getAmount() != null ? tx.getAmount() : BigDecimal.ZERO;
 
-        switch (tx.getType() == null ? "" : tx.getType().toLowerCase()) {
+        // Usar el campo amount (monto original/bruto) como la base contable para el débito/abono.
+        BigDecimal txAmount = userWallet.getAmount() != null ? userWallet.getAmount() : BigDecimal.ZERO;
+
+        switch (userWallet.getType() == null ? "" : userWallet.getType().toLowerCase()) {
             case "recharge":
-                // acreditar monto
+                // acreditar montoBruto
                 user.setBalance(userBalance.add(txAmount));
                 userRepository.save(user);
                 break;
 
             case "withdrawal":
-                // validar saldo suficiente y debitar
+                // validar saldo suficiente y debitar usando amount (sin aplicar descuentos adicionales)
                 if (userBalance.compareTo(txAmount) < 0) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Saldo insuficiente para aprobar este retiro");
                 }
                 user.setBalance(userBalance.subtract(txAmount));
                 userRepository.save(user);
+
+                // NOTA: el procesamiento de pago/payout debe usar tx.getRealAmount() (que contiene el monto neto)
+                // por ejemplo: payoutService.createPayout(user, tx.getRealAmount(), tx.getId());
                 break;
 
             default:
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de transacción no soportado: " + tx.getType());
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de transacción no soportado: " + userWallet.getType());
         }
 
-        tx.setStatus("approved");
-        tx.setApprovedAt(Instant.now());
-        tx.setApprovedBy(approver);
+        userWallet.setStatus("approved");
+        userWallet.setApprovedAt(Instant.now());
+        userWallet.setApprovedBy(approver);
 
-        return walletTransactionRepository.save(tx);
+        // Persistir y devolver
+        return walletTransactionRepository.save(userWallet);
     }
 
 
@@ -297,7 +305,7 @@ public class WalletService {
     }
 
     @Transactional
-    public WalletTransaction requestWithdrawal(UUID userId, BigDecimal amount) {
+    public WalletTransactionResponse requestWithdrawal(UUID userId, BigDecimal amount) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
@@ -305,48 +313,72 @@ public class WalletService {
             throw new IllegalArgumentException("Monto inválido");
         }
 
-        BigDecimal finalAmountUsd = amount;
-        BigDecimal rate = null;
-        boolean isSoles = false;
-
-        if (isSoles) {
-            ExchangeRate currentRate = exchangeService.getCurrentRate();
-            if (currentRate == null || currentRate.getRate() == null) {
-                throw new IllegalStateException("Tipo de cambio no disponible");
+        // 1) obtener supplierDiscount desde SettingService
+        BigDecimal supplierDiscountFraction = BigDecimal.ZERO; // fracción: 0.15 = 15%
+        List<SettingResponse> settings = settingService.getSettings();
+        if (settings != null) {
+            for (SettingResponse s : settings) {
+                if ("supplierDiscount".equalsIgnoreCase(s.getKey())) {
+                    BigDecimal raw = s.getValueNum() != null ? s.getValueNum() : BigDecimal.ZERO;
+                    // Si el valor está en formato entero porcentual (ej. 15) lo convertimos a fracción (0.15).
+                    // Si ya viene como 0.15, lo usamos tal cual.
+                    if (raw.compareTo(BigDecimal.ONE) > 0) {
+                        supplierDiscountFraction = raw.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
+                    } else {
+                        supplierDiscountFraction = raw.setScale(6, RoundingMode.HALF_UP);
+                    }
+                    break;
+                }
             }
-            rate = currentRate.getRate();
-            if (rate.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalStateException("Tipo de cambio inválido: " + rate);
-            }
-            // Convierto PEN a USD: USD = PEN / (PEN per USD)
-            finalAmountUsd = amount.divide(rate, 2, RoundingMode.HALF_UP);
-        } else {
-            finalAmountUsd = amount.setScale(2, RoundingMode.HALF_UP);
         }
 
-        // Validación de saldo disponible (asumimos user.getBalance() está en USD)
+        // 2) normalizar montos en unidades y calcular fee + real
+        BigDecimal amountUnits = amount.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal feeUnits = amountUnits.multiply(supplierDiscountFraction).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal realUnits = amountUnits.subtract(feeUnits).max(BigDecimal.ZERO);
+
+        // 3) validación de saldo (asume mismo currency / unidades)
         BigDecimal userBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
-        if (userBalance.compareTo(finalAmountUsd) < 0) {
+        if (userBalance.compareTo(amountUnits) < 0) {
             throw new IllegalArgumentException("Saldo insuficiente para retirar");
         }
 
+        // 4) convertir a centavos (BigDecimal) para persistir si tu BD usa NUMERIC o centavos
+        BigDecimal realCents = realUnits.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP);
+
+
+        // 6) construir entidad y persistir en una sola operación
         WalletTransaction tx = WalletTransaction.builder()
                 .user(user)
-                .type("withdrawal")   // tipo withdrawal ya contemplado en BD
-                .amount(finalAmountUsd)
+                .type("withdrawal")
+                .amount(amountUnits)                 // BigDecimal unidades (ej. 1000.00)
                 .currency("USD")
-                .exchangeApplied(isSoles)
-                .exchangeRate(rate)
-                .status("pending")    // se crea como pending, luego administrador lo aprobará
+                .exchangeApplied(false)
+                .exchangeRate(null)
+                .status("pending")
                 .createdAt(Instant.now())
                 .description("Withdrawal request")
-                .exchangeApplied(false)
+                // campos nuevos (asegúrate de que la entidad tenga estos tipos: BigDecimal realAmount, BigDecimal feeAmount, BigDecimal feePercent, String settingsSnapshot)
+                .realAmount(realCents)               // persistir en NUMERIC (centavos) o ajusta según tu mapping
                 .build();
 
-        return walletTransactionRepository.save(tx);
+        tx = walletTransactionRepository.save(tx);
+
+        // 7) mapear y devolver DTO con realAmount en unidades (ej. 930.00)
+        return WalletTransactionResponse.builder()
+                .id(tx.getId())
+                .userName(user.getUsername())
+                .productName(null)
+                .productCode(null)
+                .amount(amountUnits)
+                .currency(tx.getCurrency())
+                .type(tx.getType())
+                .date(tx.getCreatedAt())
+                .status(tx.getStatus())
+                .description(tx.getDescription())
+                .approvedBy(tx.getApprovedBy() != null ? tx.getApprovedBy().getUsername() : null)
+                .realAmount(realUnits)   // unidades: 930.00
+                .build();
     }
-
-
-
 
 }

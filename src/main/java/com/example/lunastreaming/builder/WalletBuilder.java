@@ -21,6 +21,7 @@ public class WalletBuilder {
                 .createdAt(walletTransaction.getCreatedAt())
                 .approvedAt(walletTransaction.getApprovedAt())
                 .description(walletTransaction.getDescription())
+                .realAmount(walletTransaction.getRealAmount())
                 .build();
     }
 

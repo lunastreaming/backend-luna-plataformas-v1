@@ -99,10 +99,8 @@ public class WalletController {
     @PostMapping("/provider/withdraw")
     public ResponseEntity<?> requestWithdrawal(@RequestBody WithdrawalRequest req, Principal principal) {
         UUID userId = UUID.fromString(principal.getName()); // o extraer desde JWT
-        WalletTransaction tx = walletService.requestWithdrawal(userId, req.getAmount());
-        return ResponseEntity.ok(tx);
+        WalletTransactionResponse walletTransactionResponse = walletService.requestWithdrawal(userId, req.getAmount());
+        return ResponseEntity.ok(walletTransactionResponse);
     }
-
-
 
 }

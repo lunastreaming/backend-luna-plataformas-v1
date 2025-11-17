@@ -53,5 +53,9 @@ public class WalletTransaction {
 
     private String description;
 
+    @Column(name = "real_amount")
+    private BigDecimal realAmount;
+
+
 
 }
