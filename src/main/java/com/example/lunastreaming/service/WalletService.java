@@ -344,8 +344,7 @@ public class WalletService {
         }
 
         // 4) convertir a centavos (BigDecimal) para persistir si tu BD usa NUMERIC o centavos
-        BigDecimal realCents = realUnits.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP);
-
+        BigDecimal realToPersist = realUnits.setScale(2, RoundingMode.HALF_UP);
 
         // 6) construir entidad y persistir en una sola operación
         WalletTransaction tx = WalletTransaction.builder()
@@ -359,7 +358,7 @@ public class WalletService {
                 .createdAt(Instant.now())
                 .description("Withdrawal request")
                 // campos nuevos (asegúrate de que la entidad tenga estos tipos: BigDecimal realAmount, BigDecimal feeAmount, BigDecimal feePercent, String settingsSnapshot)
-                .realAmount(realCents)               // persistir en NUMERIC (centavos) o ajusta según tu mapping
+                .realAmount(realToPersist)               // persistir en NUMERIC (centavos) o ajusta según tu mapping
                 .build();
 
         tx = walletTransactionRepository.save(tx);

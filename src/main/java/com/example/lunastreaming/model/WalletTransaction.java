@@ -53,7 +53,7 @@ public class WalletTransaction {
 
     private String description;
 
-    @Column(name = "real_amount")
+    @Column(name = "real_amount", precision = 20, scale = 2)
     private BigDecimal realAmount;
 
 
