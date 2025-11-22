@@ -74,6 +74,7 @@ public class WalletService {
         WalletTransaction tx = WalletTransaction.builder()
                 .user(user)
                 .type("recharge")
+                .description("Solicitud de recarga")
                 .amount(finalAmountUsd)
                 .currency("USD")
                 .exchangeApplied(isSoles)
@@ -356,7 +357,7 @@ public class WalletService {
                 .exchangeRate(null)
                 .status("pending")
                 .createdAt(Instant.now())
-                .description("Withdrawal request")
+                .description("Solicitud de retiro")
                 // campos nuevos (asegúrate de que la entidad tenga estos tipos: BigDecimal realAmount, BigDecimal feeAmount, BigDecimal feePercent, String settingsSnapshot)
                 .realAmount(realToPersist)               // persistir en NUMERIC (centavos) o ajusta según tu mapping
                 .build();

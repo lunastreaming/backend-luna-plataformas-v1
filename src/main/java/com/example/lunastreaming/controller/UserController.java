@@ -65,5 +65,12 @@ public class UserController {
         return ResponseEntity.ok(summary);
     }
 
+    // GET /api/users/search-by-phone?q=923&limit=10
+    @GetMapping("/search-by-phone")
+    public ResponseEntity<List<UserPhoneDto>> searchByPhone(@RequestParam("q") String q,
+                                                            @RequestParam(value = "limit", required = false) Integer limit) {
+        List<UserPhoneDto> result = userService.searchByPhoneDigits(q, limit);
+        return ResponseEntity.ok(result);
+    }
 
 }

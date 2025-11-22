@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
@@ -33,6 +34,10 @@ public class UserService {
     private final TokenBlacklistRepository tokenBlacklistRepository;
     private final ProviderProfileRepository providerProfileRepository;
     private final SellerProfileRepository sellerProfileRepository;
+
+    private final int DEFAULT_LIMIT = 25;
+    private final int MAX_LIMIT = 100;
+
 
     @Transactional
     public UserSummary register(RegisterRequest req) {
@@ -240,5 +245,36 @@ public class UserService {
                 .referralsCount(user.getReferralsCount())
                 .build();
     }
+
+    private String sanitizeDigits(String raw) {
+        if (raw == null) return "";
+        // Keep only digits
+        return raw.replaceAll("\\D", "");
+    }
+
+    public List<UserPhoneDto> searchByPhoneDigits(String rawQuery, Integer limitOpt) {
+        String digits = sanitizeDigits(rawQuery);
+        if (!StringUtils.hasText(digits)) return List.of();
+
+        // protect: min and max length of digits input
+        if (digits.length() < 2) return List.of(); // evita queries triviales
+        if (digits.length() > 20) digits = digits.substring(digits.length() - 20); // cap length
+
+        int limit = (limitOpt == null) ? DEFAULT_LIMIT : Math.min(limitOpt, MAX_LIMIT);
+
+        // Recomendado: buscar en cualquier parte de la cadena normalizada
+        List<Object[]> rows = userRepository.findByPhoneDigitsAny(digits, limit);
+
+        List<UserPhoneDto> out = new ArrayList<>(rows.size());
+        for (Object[] r : rows) {
+            // order of columns in query: id, username, phone
+            java.util.UUID id = (java.util.UUID) r[0];
+            String username = (String) r[1];
+            String phone = (String) r[2];
+            out.add(new UserPhoneDto(id, username, phone));
+        }
+        return out;
+    }
+
 
 }
