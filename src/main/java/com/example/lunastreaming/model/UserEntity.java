@@ -63,10 +63,12 @@ public class UserEntity {
         if (this.salesCount == null) this.salesCount = 0;
     }
 
-    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY, cascade = {CascadeType.MERGE, CascadeType.PERSIST})
-    private ProviderProfileEntity providerProfile;
-
-    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY, cascade = {CascadeType.MERGE, CascadeType.PERSIST})
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY,
+            cascade = {CascadeType.MERGE, CascadeType.PERSIST, CascadeType.REMOVE})
     private SellerProfileEntity sellerProfile;
+
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY,
+            cascade = {CascadeType.MERGE, CascadeType.PERSIST, CascadeType.REMOVE})
+    private ProviderProfileEntity providerProfile;
 
 }

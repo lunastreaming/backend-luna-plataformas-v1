@@ -5,8 +5,8 @@ import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -72,5 +72,13 @@ public class UserController {
         List<UserPhoneDto> result = userService.searchByPhoneDigits(q, limit);
         return ResponseEntity.ok(result);
     }
+
+    // Nuevo endpoint: eliminar usuario (solo admin)
+    @DeleteMapping("/delete/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable("id") UUID id, Principal principal) {
+        userService.deleteUser(id, principal);
+        return ResponseEntity.noContent().build();
+    }
+
 
 }

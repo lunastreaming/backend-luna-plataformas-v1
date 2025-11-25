@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.security.Principal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -67,13 +68,13 @@ public class UserService {
         // create profile row depending on role
         if ("provider".equalsIgnoreCase(req.role)) {
             ProviderProfileEntity provider = ProviderProfileEntity.builder()
-                    .userId(userEntity.getId())
+                    .user(userEntity)
                     .canTransfer(Boolean.FALSE) // default
                     .build();
             providerProfileRepository.save(provider);
         } else if ("seller".equalsIgnoreCase(req.role)) {
             SellerProfileEntity seller = SellerProfileEntity.builder()
-                    .userId(userEntity.getId())
+                    .user(userEntity)
                     .build();
             sellerProfileRepository.save(seller);
         }
@@ -274,6 +275,52 @@ public class UserService {
             out.add(new UserPhoneDto(id, username, phone));
         }
         return out;
+    }
+
+
+    @Transactional
+    public void deleteUser(UUID targetUserId, Principal principal) {
+        // Obtener el usuario autenticado a partir del Principal
+        UUID currentUserId = UUID.fromString(principal.getName());
+        UserEntity currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario autenticado no encontrado"));
+
+        // Validar rol admin
+        if (!"admin".equalsIgnoreCase(currentUser.getRole())) {
+            throw new SecurityException("No autorizado: se requiere rol ADMIN para eliminar usuarios");
+        }
+
+        // Validar que el usuario a eliminar exista
+        UserEntity targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario a eliminar no encontrado"));
+
+        // Eliminar usuario
+        userRepository.delete(targetUser);
+    }
+
+    @Transactional
+    public void adminChangePassword(UUID targetUserId, AdminChangePasswordRequest req, String actorUsername) {
+        // 1) Validar que el actor exista y sea admin
+        UserEntity actor = userRepository.findById(UUID.fromString(actorUsername))
+                .orElseThrow(() -> new IllegalArgumentException("actor_not_found"));
+
+        if (!"admin".equalsIgnoreCase(actor.getRole())) {
+            throw new SecurityException("forbidden");
+        }
+
+        // 2) Validar la longitud mínima > 8 (sin política de robustez adicional)
+        String newPwd = req.getNewPassword();
+        if (newPwd == null || newPwd.length() < 8) {
+            throw new IllegalArgumentException("password_too_short");
+        }
+
+        // 3) Buscar usuario objetivo y aplicar cambio
+        UserEntity target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("user_not_found"));
+
+        target.setPasswordHash(passwordEncoder.encode(newPwd));
+        target.setPasswordAlgo("argon2id");
+        userRepository.save(target);
     }
 
 

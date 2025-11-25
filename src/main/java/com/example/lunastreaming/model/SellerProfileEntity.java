@@ -21,11 +21,9 @@ public class SellerProfileEntity {
     @Column(name = "id", columnDefinition = "uuid", updatable = false, nullable = false)
     private UUID id;
 
-    @Column(name = "user_id", columnDefinition = "uuid", nullable = false, unique = true)
-    private UUID userId;
-
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", referencedColumnName = "id", insertable = false, updatable = false)
+    @JoinColumn(name = "user_id", nullable = false, unique = true)
     private UserEntity user;
+
 
 }
