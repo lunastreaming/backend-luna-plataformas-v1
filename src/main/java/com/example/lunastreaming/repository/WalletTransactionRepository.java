@@ -35,4 +35,7 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
                                                             @Param("role") String role,
                                                             @Param("types") List<String> types);
 
+    Page<WalletTransaction> findByType(String type, Pageable pageable);
+
+
 }

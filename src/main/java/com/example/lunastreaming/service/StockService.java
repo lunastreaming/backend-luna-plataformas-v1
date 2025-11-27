@@ -7,7 +7,7 @@ import com.example.lunastreaming.repository.StockRepository;
 import com.example.lunastreaming.repository.UserRepository;
 import com.example.lunastreaming.repository.WalletTransactionRepository;
 import com.example.lunastreaming.util.RequestUtil;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -437,5 +437,62 @@ public class StockService {
         Page<StockResponse> mapped = p.map(stockBuilder::toStockResponse);
         return toPagedResponse(mapped);
     }
+
+    /**
+     * Lista todos los stocks con status = "sold".
+     * Solo accesible por admin (se valida con el principal).
+     */
+    @Transactional(readOnly = true)
+    public PagedResponse<StockResponse> listAllSoldStocks(Principal principal, String q, int page, int size, String sort) {
+        // 1) validar actor admin (similar a tu ejemplo)
+        validateActorIsAdmin(principal);
+
+        // 2) crear pageable (usa tu util existente)
+        Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
+
+        // 3) consultar stocks con status = "sold"
+        Page<StockEntity> p = stockRepository.findByStatus("sold", pageable);
+
+        // 4) mapear a StockResponse y devolver PagedResponse
+        Page<StockResponse> mapped = p.map(stockBuilder::toStockResponse);
+        return toPagedResponse(mapped);
+    }
+
+    private void validateActorIsAdmin(Principal principal) {
+        if (principal == null || principal.getName() == null) {
+            throw new SecurityException("forbidden");
+        }
+
+        String actorName = principal.getName();
+        // Intentar parsear como UUID (ajusta según tu Principal)
+        try {
+            UUID actorId = UUID.fromString(actorName);
+            var actor = userRepository.findById(actorId)
+                    .orElseThrow(() -> new IllegalArgumentException("actor_not_found"));
+            if (!"admin".equalsIgnoreCase(actor.getRole())) {
+                throw new SecurityException("forbidden");
+            }
+            return;
+        } catch (IllegalArgumentException ex) {
+            // fallback: buscar por username
+            var maybe = userRepository.findByUsername(actorName);
+            var actor = maybe.orElseThrow(() -> new IllegalArgumentException("actor_not_found"));
+            if (!"admin".equalsIgnoreCase(actor.getRole())) {
+                throw new SecurityException("forbidden");
+            }
+        }
+    }
+
+    // Helper para convertir Page<T> a tu PagedResponse<T> (ajusta según tu implementación)
+    private <T> PagedResponse<T> toPagedResponse(Page<T> page) {
+        PagedResponse<T> resp = new PagedResponse<>();
+        resp.setContent(page.getContent());
+        resp.setPage(page.getNumber());
+        resp.setSize(page.getSize());
+        resp.setTotalElements(page.getTotalElements());
+        resp.setTotalPages(page.getTotalPages());
+        return resp;
+    }
+
 
 }

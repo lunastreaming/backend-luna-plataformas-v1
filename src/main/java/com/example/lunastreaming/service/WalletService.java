@@ -381,4 +381,22 @@ public class WalletService {
                 .build();
     }
 
+    /**
+     * Devuelve transacciones de wallet cuyo campo "type" coincide con el valor provisto.
+     * @param type tipo de transacción (por ejemplo "sale")
+     * @param pageable paginación
+     * @return página de WalletTransaction
+     */
+    public Page<WalletTransaction> findByType(String type, Pageable pageable, String adminId) {
+
+        UserEntity actor = userRepository.findById(UUID.fromString(adminId))
+                .orElseThrow(() -> new IllegalArgumentException("actor_not_found"));
+
+        if (!"admin".equalsIgnoreCase(actor.getRole())) {
+            throw new SecurityException("forbidden");
+        }
+        return walletTransactionRepository.findByType(type, pageable);
+    }
+
+
 }

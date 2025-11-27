@@ -56,7 +56,6 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     // Si quieres traer todos los activos
     List<StockEntity> findByProductIdAndStatus(Long productId, String status);
 
-
-
+    Page<StockEntity> findByStatus(String status, Pageable pageable);
 
 }
