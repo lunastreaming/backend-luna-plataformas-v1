@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -56,11 +57,15 @@ public class UserEntity {
     @Column
     private String passwordAlgo = "argon2id";
 
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
     @PrePersist
     public void prePersist() {
         if (this.balance == null) this.balance = BigDecimal.ZERO;
         if (this.referralsCount == null) this.referralsCount = 0;
         if (this.salesCount == null) this.salesCount = 0;
+        if (this.createdAt == null) this.createdAt = Instant.now(); // registrar fecha al crear
     }
 
     @OneToOne(mappedBy = "user", fetch = FetchType.LAZY,

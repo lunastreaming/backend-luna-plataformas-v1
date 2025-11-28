@@ -5,6 +5,7 @@ import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -21,14 +22,19 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping("/sellers")
-    public ResponseEntity<List<UserSummary>> listSellers() {
-        return ResponseEntity.ok(userService.listByRole("seller"));
+    public ResponseEntity<Page<UserSummary>> listSellers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(userService.listByRole("seller", page, size));
     }
 
     @GetMapping("/providers")
-    public ResponseEntity<List<UserSummary>> listProviders() {
-        return ResponseEntity.ok(userService.listByRole("provider"));
+    public ResponseEntity<Page<UserSummary>> listProviders(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(userService.listByRole("provider", page, size));
     }
+
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<UserSummary> updateStatus(@PathVariable("id") UUID id,

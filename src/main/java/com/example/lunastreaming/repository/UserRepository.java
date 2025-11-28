@@ -2,12 +2,15 @@ package com.example.lunastreaming.repository;
 
 import com.example.lunastreaming.model.UserEntity;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,6 +45,11 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
     Optional<UserEntity> findByIdForUpdate(@Param("id") UUID id);
 
     List<UserEntity> findByIdIn(List<UUID> ids);
+
+    Page<UserEntity> findByRole(String role, Pageable pageable);
+
+    Page<UserEntity> findByRoleIn(Collection<String> roles, Pageable pageable);
+
 
 
 

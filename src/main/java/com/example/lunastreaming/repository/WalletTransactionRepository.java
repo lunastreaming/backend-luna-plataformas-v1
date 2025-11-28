@@ -45,5 +45,6 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
 
     Page<WalletTransaction> findByTypeInAndStatusNot(Collection<String> types, String excludedStatus, Pageable pageable);
 
+    Page<WalletTransaction> findByUserIdAndStatusAndTypeNot(UUID userId, String status, String excludedType, Pageable pageable);
 
 }

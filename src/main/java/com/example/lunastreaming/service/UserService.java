@@ -11,6 +11,10 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
@@ -141,19 +145,23 @@ public class UserService {
 
 
 
-    public List<UserSummary> listByRole(String role) {
-        List<UserEntity> users;
+    public Page<UserSummary> listByRole(String role, int page, int size) {
+        Pageable pageable = PageRequest.of(
+                Math.max(0, page),
+                Math.max(1, size),
+                Sort.by(Sort.Direction.DESC, "createdAt") // orden del más reciente al más antiguo
+        );
+
+        Page<UserEntity> users;
         if ("seller".equalsIgnoreCase(role)) {
-            // traer ambos roles
-            users = userRepository.findByRoleIn(Arrays.asList("seller", "user"));
+            users = userRepository.findByRoleIn(Arrays.asList("seller", "user"), pageable);
         } else {
-            users = userRepository.findByRole(role);
+            users = userRepository.findByRole(role, pageable);
         }
 
-        return users.stream()
-                .map(UserMapper::toSummary)
-                .collect(Collectors.toList());
+        return users.map(UserMapper::toSummary);
     }
+
 
 
     @Transactional
@@ -294,8 +302,19 @@ public class UserService {
         UserEntity targetUser = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario a eliminar no encontrado"));
 
+        // Validar que el usuario esté inactivo antes de eliminar
+        String status = targetUser.getStatus() == null ? "" : targetUser.getStatus().trim().toLowerCase();
+        if (!"inactive".equals(status)) {
+            // Mensaje amigable para el cliente
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "No se puede eliminar un usuario activo. Por favor, primero inhabilita al usuario (status = inactive) y luego intenta eliminarlo."
+            );
+        }
+
         // Eliminar usuario
         userRepository.delete(targetUser);
+
     }
 
     @Transactional

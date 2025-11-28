@@ -258,11 +258,12 @@ public class WalletService {
 
     //Me trae todas las transacciones completadas
     public Page<WalletResponse> getUserTransactionsByStatus(UUID userId, String status, int page, int size) {
-        // Orden: createdAt desc (más reciente primero)
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<WalletTransaction> pageResult = walletTransactionRepository.findByUserIdAndStatus(userId, status, pageable);
-        return pageResult.map(tx -> walletBuilder.builderToWalletResponse(tx));
+        Page<WalletTransaction> pageResult = walletTransactionRepository
+                .findByUserIdAndStatusAndTypeNot(userId, status, "chargeback", pageable);
+        return pageResult.map(walletBuilder::builderToWalletResponse);
     }
+
 
 
     public Page<WalletTransactionResponse> listAllTransactionsForAdmin(Principal principal, int page) {
