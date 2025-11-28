@@ -45,5 +45,7 @@ public class StockResponse {
     private String providerName;
     private String providerPhone;
 
+    private BigDecimal amount;
+
 
 }

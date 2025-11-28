@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,6 +37,13 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
                                                             @Param("types") List<String> types);
 
     Page<WalletTransaction> findByType(String type, Pageable pageable);
+
+
+    Page<WalletTransaction> findByUserIdAndStatus(UUID userId, String status, Pageable pageable);
+
+    Page<WalletTransaction> findByStatusNot(String status, Pageable pageable);
+
+    Page<WalletTransaction> findByTypeInAndStatusNot(Collection<String> types, String excludedStatus, Pageable pageable);
 
 
 }

@@ -86,7 +86,17 @@ public class AdminController {
         return ResponseEntity.ok(result);
     }
 
-
+    // en tu controller admin (por ejemplo RefundController o AdminStockController)
+    @PostMapping("/stocks/{stockId}/refund/full")
+    public ResponseEntity<Map<String, Object>> refundStockFull(
+            @PathVariable("stockId") Long stockId,
+            @RequestBody(required = false) RefundRequest req,
+            Principal principal
+    ) {
+        java.util.UUID buyerId = req != null ? req.getBuyerId() : null;
+        Map<String, Object> result = refundService.refundStockFullAsAdmin(stockId, buyerId, principal != null ? principal.getName() : null);
+        return ResponseEntity.ok(result);
+    }
 
 
 }

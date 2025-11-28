@@ -77,6 +77,7 @@ public class StockBuilder {
                 .endAt(stockEntity.getEndAt())
                 .daysRemaining(daysRemaining)
                 .refund(refund)
+                .amount(stockEntity.getProduct().getSalePrice())
                 .build();
     }
 
@@ -138,6 +139,113 @@ public class StockBuilder {
             return Math.toIntExact(Math.max(0, floor));
         }
     }
+
+    /**
+     * Mapea una fila Object[] (resultado del SELECT nativo) a StockResponse.
+     * El orden de índices debe coincidir exactamente con el SELECT del repository.
+     *
+     * SELECT order esperado (ejemplo usado anteriormente):
+     * 0:id,
+     * 1:product_id,
+     * 2:product_name,
+     * 3:provider_id,
+     * 4:provider_name,
+     * 5:provider_phone,
+     * 6:stock_username,
+     * 7:stock_password,
+     * 8:stock_url,
+     * 9:tipo,
+     * 10:numero_perfil,
+     * 11:pin,
+     * 12:status,
+     * 13:sold_at,
+     * 14:start_at,
+     * 15:end_at,
+     * 16:client_name,
+     * 17:client_phone
+     */
+    public StockResponse mapRowToStockResponse(Object[] row) {
+        StockResponse r = new StockResponse();
+
+        // id
+        if (row[0] != null) {
+            r.setId(((Number) row[0]).longValue());
+        }
+
+        // productId
+        if (row[1] != null) {
+            try { r.setProductId(UUID.fromString(row[1].toString())); } catch (Exception ignored) {}
+        }
+
+        // productName
+        r.setProductName(row[2] != null ? row[2].toString() : null);
+
+        // providerId (no existe en StockResponse pero lo dejamos en product)
+        // providerName / providerPhone
+        r.setProviderName(row[4] != null ? row[4].toString() : null);
+        r.setProviderPhone(row[5] != null ? row[5].toString() : null);
+
+        // username / password / url
+        r.setUsername(row[6] != null ? row[6].toString() : null);
+        r.setPassword(row[7] != null ? row[7].toString() : null);
+        r.setUrl(row[8] != null ? row[8].toString() : null);
+
+        // tipo -> TypeEnum (tu enum). Intentamos mapear por nombre.
+        if (row[9] != null) {
+            try {
+                String tipoStr = row[9].toString();
+                // Ajusta si tu TypeEnum tiene nombres distintos
+                r.setType(Enum.valueOf(com.example.lunastreaming.model.TypeEnum.class, tipoStr));
+            } catch (Exception ignored) {
+                r.setType(null);
+            }
+        }
+
+        // numeroPerfil -> numberProfile
+        if (row[10] != null) {
+            try { r.setNumberProfile(((Number) row[10]).intValue()); } catch (Exception ignored) { r.setNumberProfile(null); }
+        }
+
+        // pin
+        r.setPin(row[11] != null ? row[11].toString() : null);
+
+        // status
+        r.setStatus(row[12] != null ? row[12].toString() : null);
+
+        // soldAt
+        if (row[13] instanceof Timestamp) {
+            r.setSoldAt(((Timestamp) row[13]).toInstant());
+        } else if (row[13] instanceof Instant) {
+            r.setSoldAt((Instant) row[13]);
+        } else if (row[13] != null) {
+            try { r.setSoldAt(Timestamp.valueOf(row[13].toString()).toInstant()); } catch (Exception ignored) {}
+        }
+
+        // startAt
+        if (row[14] instanceof Timestamp) {
+            r.setStartAt(((Timestamp) row[14]).toInstant());
+        } else if (row[14] instanceof Instant) {
+            r.setStartAt((Instant) row[14]);
+        }
+
+        // endAt
+        if (row[15] instanceof Timestamp) {
+            r.setEndAt(((Timestamp) row[15]).toInstant());
+        } else if (row[15] instanceof Instant) {
+            r.setEndAt((Instant) row[15]);
+        }
+
+        // clientName / clientPhone
+        r.setClientName(row[16] != null ? row[16].toString() : null);
+        r.setClientPhone(row[17] != null ? row[17].toString() : null);
+
+        // published / refund / daysRemaining / buyer fields are not selected in the native query above.
+        // Si los necesitas, añade las columnas al SELECT y mapea aquí:
+        // r.setPublished(...); r.setRefund(...); r.setDaysRemaining(...); r.setBuyerId(...); r.setBuyerUsername(...);
+
+        return r;
+    }
+
 
 
 }

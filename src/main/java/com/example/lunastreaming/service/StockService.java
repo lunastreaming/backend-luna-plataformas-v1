@@ -7,10 +7,9 @@ import com.example.lunastreaming.repository.StockRepository;
 import com.example.lunastreaming.repository.UserRepository;
 import com.example.lunastreaming.repository.WalletTransactionRepository;
 import com.example.lunastreaming.util.RequestUtil;
+import org.springframework.data.domain.*;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -444,18 +443,67 @@ public class StockService {
      */
     @Transactional(readOnly = true)
     public PagedResponse<StockResponse> listAllSoldStocks(Principal principal, String q, int page, int size, String sort) {
-        // 1) validar actor admin (similar a tu ejemplo)
+        // 1) validar actor admin (tu implementación)
         validateActorIsAdmin(principal);
 
-        // 2) crear pageable (usa tu util existente)
-        Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
+        // 2) normalizar page/size y crear Pageable (usa tu RequestUtil si prefieres)
+        int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+        int safePage = Math.max(0, page);
+
+        Sort sortObj = Sort.by(Sort.Direction.DESC, "soldAt");
+        if (sort != null && !sort.isBlank()) {
+            String[] parts = sort.split(",");
+            if (parts.length == 2) {
+                String field = parts[0];
+                Sort.Direction dir = "asc".equalsIgnoreCase(parts[1]) ? Sort.Direction.ASC : Sort.Direction.DESC;
+                sortObj = Sort.by(dir, field);
+            }
+        }
+        Pageable pageable = PageRequest.of(safePage, safeSize, sortObj);
 
         // 3) consultar stocks con status = "sold"
-        Page<StockEntity> p = stockRepository.findByStatus("sold", pageable);
+        Page<StockEntity> pageResult = stockRepository.findByStatus("sold", pageable);
 
-        // 4) mapear a StockResponse y devolver PagedResponse
-        Page<StockResponse> mapped = p.map(stockBuilder::toStockResponse);
-        return toPagedResponse(mapped);
+        // 4) recolectar providerIds desde product.providerId (evitar nulls)
+        List<UUID> providerIds = pageResult.stream()
+                .map(StockEntity::getProduct)
+                .filter(Objects::nonNull)
+                .map(ProductEntity::getProviderId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // 5) construir providerMap UNA VEZ y no reasignarlo (final)
+        final Map<UUID, UserEntity> providerMap;
+        if (providerIds.isEmpty()) {
+            providerMap = Collections.emptyMap();
+        } else {
+            List<UserEntity> providers = userRepository.findByIdIn(providerIds);
+            providerMap = providers.stream().collect(Collectors.toMap(UserEntity::getId, Function.identity()));
+        }
+
+        // 6) mapear a StockResponse y enriquecer con providerName/providerPhone
+        List<StockResponse> content = pageResult.stream()
+                .map(stock -> {
+                    StockResponse resp = stockBuilder.toStockResponse(stock);
+
+                    ProductEntity prod = stock.getProduct();
+                    if (prod != null && prod.getProviderId() != null) {
+                        UserEntity provider = providerMap.get(prod.getProviderId());
+                        if (provider != null) {
+                            resp.setProviderName(provider.getUsername());
+                            resp.setProviderPhone(provider.getPhone());
+                        }
+                    }
+
+                    return resp;
+                })
+                .collect(Collectors.toList());
+
+        Page<StockResponse> mappedPage = new PageImpl<>(content, pageable, pageResult.getTotalElements());
+
+        // 7) convertir a PagedResponse (usa tu util real)
+        return toPagedResponse(mappedPage);
     }
 
     private void validateActorIsAdmin(Principal principal) {

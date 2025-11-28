@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
@@ -21,6 +22,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.security.Principal;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,6 +42,8 @@ public class WalletService {
     private final WalletBuilder walletBuilder;
 
     private final SettingService settingService;
+
+    private static final int PAGE_SIZE = 100;
 
     public WalletTransaction requestRecharge(UUID userId, BigDecimal amount, boolean isSoles) {
         UserEntity user = userRepository.findById(userId)
@@ -252,11 +256,14 @@ public class WalletService {
         return "admin".equalsIgnoreCase(user.getRole());
     }
 
-    public List<WalletResponse> getUserTransactionsByStatus(UUID userId, String status) {
-        List<WalletTransaction> byUserIdAndStatus = walletTransactionRepository.findByUserIdAndStatus(userId, status);
-        return byUserIdAndStatus.stream().map(x -> walletBuilder.builderToWalletResponse(x))
-                .toList();
+    //Me trae todas las transacciones completadas
+    public Page<WalletResponse> getUserTransactionsByStatus(UUID userId, String status, int page, int size) {
+        // Orden: createdAt desc (más reciente primero)
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<WalletTransaction> pageResult = walletTransactionRepository.findByUserIdAndStatus(userId, status, pageable);
+        return pageResult.map(tx -> walletBuilder.builderToWalletResponse(tx));
     }
+
 
     public Page<WalletTransactionResponse> listAllTransactionsForAdmin(Principal principal, int page) {
         UUID adminId = resolveUserIdFromPrincipal(principal);
@@ -264,17 +271,25 @@ public class WalletService {
         UserEntity admin = userRepository.findById(adminId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
 
-        // Ajusta a tu comprobación de admin. Ejemplo con role:
         if (!isAdmin(admin)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Acceso restringido a administradores");
         }
 
-        // Paginación: page (0-based), size 100
-        Pageable pageable = PageRequest.of(Math.max(0, page), 100);
-        Page<WalletTransaction> pageTx = walletTransactionRepository.findAll(pageable);
+        // Ordenar por fecha descendente (más reciente primero).
+        // Ajusta "createdAt" si tu entidad usa otro nombre (por ejemplo "date" o "timestamp").
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdAt");
+        Pageable pageable = PageRequest.of(Math.max(0, page), PAGE_SIZE, sort);
+
+        // Tipos permitidos: recharge y withdrawal
+        List<String> allowedTypes = Arrays.asList("recharge", "withdrawal");
+
+        // Excluir transacciones con status = 'cancelled' y filtrar por tipo
+        Page<WalletTransaction> pageTx = walletTransactionRepository.findByTypeInAndStatusNot(allowedTypes, "cancelled", pageable);
 
         return pageTx.map(this::toResponse);
     }
+
+
 
     private WalletTransactionResponse toResponse(WalletTransaction tx) {
         WalletTransactionResponse r = new WalletTransactionResponse();

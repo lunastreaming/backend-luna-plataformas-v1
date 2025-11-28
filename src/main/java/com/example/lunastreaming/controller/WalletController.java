@@ -68,19 +68,27 @@ public class WalletController {
 
     // Obtener movimientos del usuario filtrando por status (por defecto approved)
     @GetMapping("/user/transactions")
-    public ResponseEntity<List<WalletResponse>> getUserTransactionsByStatus(
+    public ResponseEntity<Page<WalletResponse>> getUserTransactionsByStatus(
             Principal principal,
-            @RequestParam(value = "status", required = false, defaultValue = "approved") String statusParam
+            @RequestParam(value = "status", required = false, defaultValue = "approved") String statusParam,
+            @RequestParam(value = "page", required = false, defaultValue = "0") int page,
+            @RequestParam(value = "size", required = false, defaultValue = "20") int size
     ) {
         // normalizar synonyms: "complete" -> "approved"
         String normalizedStatus = "approved".equalsIgnoreCase(statusParam) ? "approved"
                 : "complete".equalsIgnoreCase(statusParam) ? "approved"
                 : statusParam.toLowerCase();
 
+        // validación simple de size (evitar requests con size excesivo)
+        final int MAX_PAGE_SIZE = 100;
+        if (size < 1) size = 20;
+        if (size > MAX_PAGE_SIZE) size = MAX_PAGE_SIZE;
+
         UUID userId = UUID.fromString(principal.getName());
-        List<WalletResponse> transactions = walletService.getUserTransactionsByStatus(userId, normalizedStatus);
+        Page<WalletResponse> transactions = walletService.getUserTransactionsByStatus(userId, normalizedStatus, page, size);
         return ResponseEntity.ok(transactions);
     }
+
 
     //Traer para el admin todos los valores
 

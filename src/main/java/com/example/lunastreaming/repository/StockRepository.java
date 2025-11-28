@@ -58,4 +58,35 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
 
     Page<StockEntity> findByStatus(String status, Pageable pageable);
 
+    @Query(
+            value = "SELECT " +
+                    "s.id, " +
+                    "p.id AS product_id, " +
+                    "p.name AS product_name, " +
+                    "p.provider_id AS provider_id, " +
+                    "u.username AS provider_name, " +
+                    "u.phone AS provider_phone, " +
+                    "s.username AS stock_username, " +
+                    "s.password AS stock_password, " +
+                    "s.url AS stock_url, " +
+                    "s.tipo AS tipo, " +
+                    "s.numero_perfil AS numero_perfil, " +
+                    "s.pin AS pin, " +
+                    "s.status AS status, " +
+                    "s.sold_at AS sold_at, " +
+                    "s.start_at AS start_at, " +
+                    "s.end_at AS end_at, " +
+                    "s.client_name AS client_name, " +
+                    "s.client_phone AS client_phone " +
+                    "FROM stock s " +
+                    "JOIN products p ON s.product_id = p.id " +
+                    "LEFT JOIN users u ON p.provider_id = u.id " +
+                    "WHERE s.status = :status " +
+                    "AND (:q IS NULL OR :q = '' OR (p.name ILIKE CONCAT('%', :q, '%') OR s.username ILIKE CONCAT('%', :q, '%')))",
+            countQuery = "SELECT COUNT(*) FROM stock s JOIN products p ON s.product_id = p.id WHERE s.status = :status AND (:q IS NULL OR :q = '' OR (p.name ILIKE CONCAT('%', :q, '%') OR s.username ILIKE CONCAT('%', :q, '%')))",
+            nativeQuery = true
+    )
+    Page<Object[]> findSoldStocksWithProviderNative(@Param("status") String status, @Param("q") String q, Pageable pageable);
+
+
 }
