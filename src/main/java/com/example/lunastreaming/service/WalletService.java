@@ -281,7 +281,7 @@ public class WalletService {
         Pageable pageable = PageRequest.of(Math.max(0, page), PAGE_SIZE, sort);
 
         // Tipos permitidos: recharge y withdrawal
-        List<String> allowedTypes = Arrays.asList("recharge", "withdrawal");
+        List<String> allowedTypes = Arrays.asList("recharge", "withdrawal", "chargeback");
 
         // Excluir transacciones con status = 'cancelled' y filtrar por tipo
         Page<WalletTransaction> pageTx = walletTransactionRepository.findByTypeInAndStatusNot(allowedTypes, "cancelled", pageable);
@@ -413,5 +413,92 @@ public class WalletService {
         return walletTransactionRepository.findByType(type, pageable);
     }
 
+    @Transactional
+    public WalletTransaction extornoRecharge(UUID txId, String actorPrincipalName) {
+        // 1) validar actor admin
+        UUID actorId;
+        try {
+            actorId = UUID.fromString(actorPrincipalName);
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Principal inválido");
+        }
+
+        UserEntity actor = userRepository.findById(actorId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin no encontrado"));
+
+        if (!"admin".equalsIgnoreCase(actor.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
+        }
+
+        // 2) cargar transacción original
+        WalletTransaction original = walletTransactionRepository.findById(txId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transacción no encontrada"));
+
+        String txType = original.getType() == null ? "" : original.getType().toLowerCase();
+        String txStatus = original.getStatus() == null ? "" : original.getStatus().toLowerCase();
+
+        // 3) validar tipo y estado
+        if (!"recharge".equals(txType)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo se puede extornar transacciones de tipo recharge");
+        }
+        if (!("approved".equals(txStatus) || "complete".equals(txStatus))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La transacción debe estar en estado approved o complete para extornar");
+        }
+
+        // 4) obtener usuario owner y monto
+        UserEntity owner = original.getUser();
+        if (owner == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Transacción sin usuario asociado");
+        }
+
+        BigDecimal txAmount = original.getAmount() != null ? original.getAmount() : BigDecimal.ZERO;
+        if (txAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Monto inválido para extorno");
+        }
+
+        // 5) lock y validar saldo del owner antes de descontar
+        UserEntity ownerLocked = userRepository.findByIdForUpdate(owner.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Usuario no disponible para actualización"));
+
+        BigDecimal ownerBalance = ownerLocked.getBalance() != null ? ownerLocked.getBalance() : BigDecimal.ZERO;
+        if (ownerBalance.compareTo(txAmount) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Saldo insuficiente para realizar el extorno");
+        }
+
+        // 6) crear transacción de tipo rechargeback (extorno)
+        Instant now = Instant.now();
+
+        // Decide convención: aquí guardamos amount negativo para reflejar débito en el historial.
+        WalletTransaction extornoTx = WalletTransaction.builder()
+                .user(ownerLocked)
+                .type("chargeback")                 // nuevo tipo para extorno
+                .amount(txAmount.negate())            // monto negativo para indicar débito
+                .currency(original.getCurrency() != null ? original.getCurrency() : "USD")
+                .exchangeApplied(false)
+                .exchangeRate(null)
+                .status("approved")
+                .createdAt(now)
+                .description("Extorno de recarga. Original txId: " + txId)
+                .realAmount(txAmount.negate())        // si usas realAmount, también negativo
+                .build();
+
+        WalletTransaction savedExtorno = walletTransactionRepository.save(extornoTx);
+
+        // 7) actualizar balance del owner (descontar)
+        BigDecimal newOwnerBalance = ownerBalance.subtract(txAmount).setScale(2, RoundingMode.HALF_UP);
+        ownerLocked.setBalance(newOwnerBalance);
+        userRepository.save(ownerLocked);
+
+        // 8) actualizar transacción original: marcar como extornado
+        original.setStatus("extornado"); // o el estado que prefieras: "reversed", "extorno"// si tienes campo updatedAt
+        // opcional: registrar quién hizo el extorno si tienes campo (e.g., setReversedBy)
+        // original.setReversedBy(actor);
+        // original.setReversedAt(now);
+
+        walletTransactionRepository.save(original);
+
+        // 9) devolver la transacción de extorno creada (o la original actualizada según prefieras)
+        return savedExtorno;
+    }
 
 }

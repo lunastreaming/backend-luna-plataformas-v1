@@ -111,4 +111,9 @@ public class WalletController {
         return ResponseEntity.ok(walletTransactionResponse);
     }
 
+    @PostMapping("/admin/extorno/{txId}")
+    public ResponseEntity<WalletTransaction> extornoRecharge(@PathVariable UUID txId, Principal principal) {
+        WalletTransaction result = walletService.extornoRecharge(txId, principal.getName());
+        return ResponseEntity.ok(result);
+    }
 }
