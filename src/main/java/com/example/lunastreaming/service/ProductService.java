@@ -531,6 +531,92 @@ public class ProductService {
         return s != null && !s.isBlank();
     }
 
+    @Transactional
+    public ProductEntity renewProduct(UUID productId, Principal principal) {
+        if (principal == null || principal.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Usuario no autenticado");
+        }
 
+        ProductEntity product = productRepository.findById(productId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto no encontrado"));
+
+        UUID callerId = resolveUserIdFromPrincipal(principal);
+        if (!callerId.equals(product.getProviderId())) {
+            throw new AccessDeniedException("No autorizado para renovar este producto");
+        }
+
+        // Obtener precio de publicación
+        BigDecimal publishPrice = settingRepository.findValueNumByKey("supplierPublication")
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "supplierPublication no configurado"));
+
+        UserEntity user = userRepository.findById(callerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        // Normalizar balance a BigDecimal (igual que en publishProduct)
+        BigDecimal balance = toBigDecimal(user.getBalance());
+        BigDecimal price = toBigDecimal(publishPrice);
+
+        if (balance.compareTo(price) < 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Saldo insuficiente para renovar el producto");
+        }
+
+        // Descontar saldo y guardar usuario
+        BigDecimal newBalance = balance.subtract(price).setScale(2, RoundingMode.HALF_UP);
+        user.setBalance(newBalance);
+        userRepository.save(user);
+
+        // Registrar transacción en wallet_transactions
+        WalletTransaction tx = WalletTransaction.builder()
+                .user(user)
+                .type("publish") // o "renew" si prefieres distinguir
+                .amount(price.negate())
+                .currency("USD")
+                .exchangeApplied(false)
+                .exchangeRate(null)
+                .status("approved")
+                .createdAt(Instant.now())
+                .approvedAt(Instant.now())
+                .approvedBy(user)
+                .description("Renovación de producto: " + product.getName())
+                .build();
+        walletTransactionRepository.save(tx);
+
+        // Lógica de fechas
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
+        LocalDate newEnd;
+        LocalDate currentEnd = null;
+        if (product.getPublishEnd() != null) {
+            currentEnd = product.getPublishEnd().toLocalDateTime().toLocalDate();
+        }
+
+        if (product.getActive() != null && product.getActive() && currentEnd != null && currentEnd.isAfter(today)) {
+            // Producto activo: sumar 30 días a publishEnd actual
+            newEnd = currentEnd.plusDays(30);
+            // publishStart se mantiene (no la cambiamos)
+        } else {
+            // Producto vencido o inactivo: activar desde hoy por 30 días
+            newEnd = today.plusDays(30);
+            product.setPublishStart(Timestamp.valueOf(today.atStartOfDay()));
+            product.setActive(true);
+        }
+
+        product.setPublishEnd(Timestamp.valueOf(newEnd.atStartOfDay()));
+        long daysRemaining = ChronoUnit.DAYS.between(today, newEnd);
+        product.setDaysRemaining((int) Math.max(0, daysRemaining));
+
+        return productRepository.save(product);
+    }
+
+    // Helper para convertir a BigDecimal (puedes moverlo a util)
+    private BigDecimal toBigDecimal(Object raw) {
+        if (raw == null) return BigDecimal.ZERO;
+        if (raw instanceof BigDecimal) return (BigDecimal) raw;
+        if (raw instanceof Number) return BigDecimal.valueOf(((Number) raw).doubleValue());
+        try {
+            return new BigDecimal(raw.toString());
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Valor numérico inválido");
+        }
+    }
 
 }

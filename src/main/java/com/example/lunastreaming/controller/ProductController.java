@@ -69,7 +69,10 @@ public class ProductController {
         return ResponseEntity.ok(updated);
     }
 
-
-
+    @PatchMapping("/{id}/publish/renew")
+    public ResponseEntity<ProductEntity> renewProduct(@PathVariable UUID id, Principal principal) {
+        ProductEntity updated = productService.renewProduct(id, principal);
+        return ResponseEntity.ok(updated);
+    }
 
 }
