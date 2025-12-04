@@ -88,5 +88,14 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     )
     Page<Object[]> findSoldStocksWithProviderNative(@Param("status") String status, @Param("q") String q, Pageable pageable);
 
+    // SupportTicketRepository (si lo necesitas para subconsultas)
+    @Query("select distinct s.stock.id from SupportTicketEntity s where s.status in :statuses")
+    List<Long> findStockIdsByStatusIn(@Param("statuses") Collection<String> statuses);
+
+    // StockRepository
+    @Query("select st from StockEntity st where st.buyer.id = :buyerId and st.id not in :excludedStockIds")
+    Page<StockEntity> findByBuyerIdAndIdNotInPaged(@Param("buyerId") UUID buyerId,
+                                                   @Param("excludedStockIds") Collection<Long> excludedStockIds,
+                                                   Pageable pageable);
 
 }

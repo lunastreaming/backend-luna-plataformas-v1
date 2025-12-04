@@ -2,10 +2,7 @@ package com.example.lunastreaming.service;
 
 import com.example.lunastreaming.builder.StockBuilder;
 import com.example.lunastreaming.model.*;
-import com.example.lunastreaming.repository.ProductRepository;
-import com.example.lunastreaming.repository.StockRepository;
-import com.example.lunastreaming.repository.UserRepository;
-import com.example.lunastreaming.repository.WalletTransactionRepository;
+import com.example.lunastreaming.repository.*;
 import com.example.lunastreaming.util.RequestUtil;
 import org.springframework.data.domain.*;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +41,8 @@ public class StockService {
     private final WalletTransactionRepository walletTransactionRepository;
 
     private final PasswordEncoder passwordEncoder;
+
+    private final SupportTicketRepository supportTicketRepository;
 
 
     public List<StockResponse> getByProviderPrincipal(String principalName) {
@@ -373,9 +372,20 @@ public class StockService {
 
         Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
 
-        Page<StockEntity> p = stockRepository.findByBuyerIdPaged(buyerId, pageable);
+        // 1) obtener stockIds que tienen tickets en estado activo (OPEN, IN_PROGRESS)
+        List<Long> excludedStockIds = stockRepository.findStockIdsByStatusIn(List.of("OPEN", "IN_PROGRESS"));
+        Page<StockEntity> p;
 
-        // reunir providerIds únicos que aparecen en esta página
+        // 2) elegir la consulta adecuada según si hay excludedStockIds
+        if (excludedStockIds == null || excludedStockIds.isEmpty()) {
+            // no hay tickets activos: usar la consulta normal por buyer
+            p = stockRepository.findByBuyerIdPaged(buyerId, pageable);
+        } else {
+            // excluir stocks con tickets activos
+            p = stockRepository.findByBuyerIdAndIdNotInPaged(buyerId, excludedStockIds, pageable);
+        }
+
+        // 3) provider enrichment (batch)
         Set<UUID> providerIds = p.stream()
                 .map(StockEntity::getProduct)
                 .filter(Objects::nonNull)
@@ -383,39 +393,77 @@ public class StockService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        // cargar todos los providers en batch y mapear por id -> UserEntity
         final Map<UUID, UserEntity> providersById = providerIds.isEmpty()
                 ? Collections.emptyMap()
                 : userRepository.findAllById(providerIds).stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(UserEntity::getId, Function.identity()));
 
-        // mapear cada stock a StockResponse y enriquecer con providerName y providerPhone
+        // 4) obtener stockIds de la página resultante para cargar tickets cerrados (RESOLVED)
+        List<Long> pageStockIds = p.stream()
+                .map(StockEntity::getId)
+                .collect(Collectors.toList());
+
+        List<SupportTicketEntity> resolvedTickets = pageStockIds.isEmpty()
+                ? Collections.emptyList()
+                : supportTicketRepository.findByStockIdInAndStatusIn(pageStockIds, List.of("RESOLVED"));
+
+        // 5) mapear stockId -> ticket preferido (más reciente por resolvedAt)
+        Map<Long, SupportTicketEntity> ticketByStockId = resolvedTickets.stream()
+                .collect(Collectors.groupingBy(
+                        t -> t.getStock().getId(),
+                        Collectors.collectingAndThen(
+                                Collectors.maxBy(Comparator.comparing(
+                                        t -> t.getResolvedAt() != null ? t.getResolvedAt() : t.getUpdatedAt()
+                                )),
+                                opt -> opt.orElse(null)
+                        )
+                ));
+
+        // 6) mapear cada stock a StockResponse y enriquecer con provider y soporte
         Page<StockResponse> mapped = p.map(stock -> {
             StockResponse dto = stockBuilder.toStockResponse(stock);
 
+            // provider enrichment
             ProductEntity prod = stock.getProduct();
-            if (prod != null) {
-                UUID provId = prod.getProviderId();
-                if (provId != null) {
-                    UserEntity prov = providersById.get(provId);
-                    if (prov != null) {
-                        // suponiendo que tu UserEntity tiene getUsername() y getPhone()
-                        dto.setProviderName(prov.getUsername());
-                        dto.setProviderPhone(prov.getPhone());
-                    } else {
-                        dto.setProviderName(null);
-                        dto.setProviderPhone(null);
-                    }
+            if (prod != null && prod.getProviderId() != null) {
+                UserEntity prov = providersById.get(prod.getProviderId());
+                if (prov != null) {
+                    dto.setProviderName(prov.getUsername());
+                    dto.setProviderPhone(prov.getPhone());
                 }
             }
+
+            // soporte: rellenar solo si existe ticket cerrado
+            SupportTicketEntity ticket = ticketByStockId.get(stock.getId());
+            if (ticket != null) {
+                dto.setSupportId(ticket.getId());
+                dto.setSupportType(ticket.getIssueType());
+                dto.setSupportStatus(ticket.getStatus());
+                dto.setSupportCreatedAt(ticket.getCreatedAt());
+                dto.setSupportUpdatedAt(ticket.getUpdatedAt());
+                dto.setSupportResolvedAt(ticket.getResolvedAt());
+                dto.setSupportResolutionNote(
+                        stock.getResolutionNote() != null ? stock.getResolutionNote() : ticket.getResolutionNote()
+                );
+            } else {
+                dto.setSupportId(null);
+                dto.setSupportType(null);
+                dto.setSupportStatus(null);
+                dto.setSupportCreatedAt(null);
+                dto.setSupportUpdatedAt(null);
+                dto.setSupportResolvedAt(null);
+                dto.setSupportResolutionNote(null);
+            }
+
+            // opcional: enmascarar password si no quieres exponerlo en la lista
+            // dto.setPassword(mask(dto.getPassword()));
 
             return dto;
         });
 
         return toPagedResponse(mapped);
     }
-
 
     /**
      * Lista las ventas (stocks vendidos) del proveedor autenticado.

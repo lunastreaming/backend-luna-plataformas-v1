@@ -48,4 +48,16 @@ public class StockResponse {
     private BigDecimal amount;
 
 
+    //support
+
+    private Long supportId;
+    private String supportType;
+    private String supportStatus;
+    private Instant supportCreatedAt;
+    private Instant supportUpdatedAt;
+    private Instant supportResolvedAt;
+    private String supportResolutionNote;
+
+
+
 }

@@ -55,5 +55,7 @@ public class StockEntity {
     @Column(name = "end_at")
     private Instant endAt;
 
+    @Column(name = "resolution_note")
+    private String resolutionNote;
 
 }
