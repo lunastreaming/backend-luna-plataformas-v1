@@ -22,7 +22,6 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.example.lunastreaming.util.PaginationUtil.toPagedResponse;
 
 @Service
 @RequiredArgsConstructor
@@ -250,16 +249,13 @@ public class StockService {
     public StockResponse purchaseProduct(UUID productId, PurchaseRequest req, Principal principal) {
         UUID buyerId = resolveUserIdFromPrincipal(principal);
 
-        // Buscar usuario comprador
         UserEntity buyer = userRepository.findById(buyerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comprador no encontrado"));
 
-        // 🔐 Validación de contraseña al inicio
         if (!passwordEncoder.matches(req.getPassword(), buyer.getPasswordHash())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña ingresada es incorrecta");
         }
 
-        // Buscar un stock activo del producto
         StockEntity stock = stockRepository.findFirstByProductIdAndStatus(productId, "active")
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No hay stock activo disponible"));
 
@@ -270,16 +266,15 @@ public class StockService {
 
         BigDecimal price = product.getSalePrice();
 
-        // Validar saldo
         if (buyer.getBalance().compareTo(price) < 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Saldo insuficiente");
         }
 
-        // Descontar saldo del comprador
+        // Descontar saldo comprador
         buyer.setBalance(buyer.getBalance().subtract(price));
         userRepository.save(buyer);
 
-        // Registrar transacción de compra
+        // Transacción compra
         walletTransactionRepository.save(WalletTransaction.builder()
                 .user(buyer)
                 .type("purchase")
@@ -292,14 +287,13 @@ public class StockService {
                 .exchangeApplied(false)
                 .build());
 
-        // Acreditar saldo al proveedor
+        // Acreditar proveedor inmediatamente
         UserEntity provider = userRepository.findById(product.getProviderId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
 
         provider.setBalance(provider.getBalance().add(price));
         userRepository.save(provider);
 
-        // Registrar transacción de venta
         walletTransactionRepository.save(WalletTransaction.builder()
                 .user(provider)
                 .type("sale")
@@ -312,32 +306,30 @@ public class StockService {
                 .exchangeApplied(false)
                 .build());
 
-        // Marcar stock como vendido y guardar campos de cliente
+        // Marcar stock
         stock.setBuyer(buyer);
-
-        // fechas: startAt = ahora, endAt = startAt + product.days
-        Instant now = Instant.now();
-        stock.setStartAt(now);
-
-        Integer days = product.getDays() == null ? 0 : product.getDays();
-        if (days > 0) {
-            Instant endInstant = now.plus(days, ChronoUnit.DAYS);
-            stock.setEndAt(endInstant);
-        } else {
-            stock.setEndAt(null);
-        }
-
-        // guardar monto pagado en stock si tienes ese campo (recomendado)
-        // stock.setPaidAmount(price);
-
-        stock.setSoldAt(Timestamp.from(now));
         stock.setClientName(req.getClientName());
         stock.setClientPhone(req.getClientPhone());
-        stock.setStatus("sold");
-        stockRepository.save(stock);
+        stock.setSoldAt(Timestamp.from(Instant.now()));
 
+        if (Boolean.TRUE.equals(product.getIsOnRequest())) {
+            // 🚩 Caso bajo pedido: no iniciar fechas aún
+            stock.setStatus("requested");
+            stock.setStartAt(null);
+            stock.setEndAt(null);
+        } else {
+            // 🚩 Caso normal: iniciar inmediatamente
+            Instant now = Instant.now();
+            stock.setStartAt(now);
+            Integer days = product.getDays() == null ? 0 : product.getDays();
+            stock.setEndAt(days > 0 ? now.plus(days, ChronoUnit.DAYS) : null);
+            stock.setStatus("sold");
+        }
+
+        stockRepository.save(stock);
         return stockBuilder.toStockResponse(stock);
     }
+
 
 
     public UUID resolveUserIdFromPrincipal(Principal principal) {
@@ -367,22 +359,30 @@ public class StockService {
      * @param size      tamaño de página
      * @param sort      especificador de orden (ej: "soldAt,desc;productName,asc")
      */
-    public PagedResponse<StockResponse> listPurchases(Principal principal, String q, int page, int size, String sort) {
+    @Transactional(readOnly = true)
+    public PagedResponse<StockResponse> listPurchases(
+            Principal principal,
+            String q,
+            int page,
+            int size,
+            String sort
+    ) {
         UUID buyerId = resolveUserIdFromPrincipal(principal);
 
         Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
 
         // 1) obtener stockIds que tienen tickets en estado activo (OPEN, IN_PROGRESS)
         List<Long> excludedStockIds = stockRepository.findStockIdsByStatusIn(List.of("OPEN", "IN_PROGRESS"));
+
         Page<StockEntity> p;
 
         // 2) elegir la consulta adecuada según si hay excludedStockIds
         if (excludedStockIds == null || excludedStockIds.isEmpty()) {
-            // no hay tickets activos: usar la consulta normal por buyer
-            p = stockRepository.findByBuyerIdPaged(buyerId, pageable);
+            // traer SOLO stocks del cliente con estado SOLD
+            p = stockRepository.findByBuyerIdAndStatus(buyerId, "sold", pageable);
         } else {
-            // excluir stocks con tickets activos
-            p = stockRepository.findByBuyerIdAndIdNotInPaged(buyerId, excludedStockIds, pageable);
+            // traer SOLO stocks del cliente con estado SOLD y excluir los que tienen tickets activos
+            p = stockRepository.findByBuyerIdAndStatusAndIdNotIn(buyerId, "sold", excludedStockIds, pageable);
         }
 
         // 3) provider enrichment (batch)
@@ -446,18 +446,7 @@ public class StockService {
                 dto.setSupportResolutionNote(
                         stock.getResolutionNote() != null ? stock.getResolutionNote() : ticket.getResolutionNote()
                 );
-            } else {
-                dto.setSupportId(null);
-                dto.setSupportType(null);
-                dto.setSupportStatus(null);
-                dto.setSupportCreatedAt(null);
-                dto.setSupportUpdatedAt(null);
-                dto.setSupportResolvedAt(null);
-                dto.setSupportResolutionNote(null);
             }
-
-            // opcional: enmascarar password si no quieres exponerlo en la lista
-            // dto.setPassword(mask(dto.getPassword()));
 
             return dto;
         });
@@ -590,5 +579,154 @@ public class StockService {
         return resp;
     }
 
+    @Transactional
+    public StockResponse approveStock(Long stockId, Principal principal) {
+        UUID providerId = resolveUserIdFromPrincipal(principal);
+
+        StockEntity stock = stockRepository.findById(stockId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Stock no encontrado"));
+
+        ProductEntity product = stock.getProduct();
+        if (product == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Producto no asociado");
+        }
+
+        // Validar que el proveedor que aprueba sea el dueño del producto
+        if (!product.getProviderId().equals(providerId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado para aprobar este stock");
+        }
+
+        if (!"requested".equalsIgnoreCase(stock.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El stock no está en estado solicitado");
+        }
+
+        // Aprobar: asignar fechas
+        Instant now = Instant.now();
+        stock.setStartAt(now);
+        Integer days = product.getDays() == null ? 0 : product.getDays();
+        stock.setEndAt(days > 0 ? now.plus(days, ChronoUnit.DAYS) : null);
+        stock.setStatus("sold");
+        stockRepository.save(stock);
+
+        return stockBuilder.toStockResponse(stock);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StockResponse> getClientOnRequestPending(Principal principal) {
+        UUID buyerId = resolveUserIdFromPrincipal(principal);
+
+        List<StockEntity> stocks = stockRepository
+                .findByBuyerIdAndStatus(buyerId, "requested");
+
+        return stocks.stream()
+                .filter(s -> Boolean.TRUE.equals(s.getProduct().getIsOnRequest()))
+                .map(stockBuilder::toStockResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<StockResponse> getProviderOnRequestPending(Principal principal) {
+        UUID providerId = resolveUserIdFromPrincipal(principal);
+
+        List<StockEntity> stocks = stockRepository
+                .findByProductProviderIdAndStatus(providerId, "requested");
+
+        return stocks.stream()
+                .filter(s -> Boolean.TRUE.equals(s.getProduct().getIsOnRequest()))
+                .map(stockBuilder::toStockResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<StockResponse> listRefunds(
+            Principal principal,
+            String q,
+            int page,
+            int size,
+            String sort
+    ) {
+        UUID buyerId = resolveUserIdFromPrincipal(principal);
+
+        Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
+
+        // 1) obtener stockIds que tienen tickets activos (OPEN, IN_PROGRESS)
+        List<Long> excludedStockIds = stockRepository.findStockIdsByStatusIn(List.of("OPEN", "IN_PROGRESS"));
+
+        Page<StockEntity> p;
+
+        // 2) traer SOLO stocks del cliente con estado REFUND
+        if (excludedStockIds == null || excludedStockIds.isEmpty()) {
+            p = stockRepository.findByBuyerIdAndStatus(buyerId, "REFUND", pageable);
+        } else {
+            p = stockRepository.findByBuyerIdAndStatusAndIdNotIn(buyerId, "REFUND", excludedStockIds, pageable);
+        }
+
+        // 3) provider enrichment
+        Set<UUID> providerIds = p.stream()
+                .map(StockEntity::getProduct)
+                .filter(Objects::nonNull)
+                .map(ProductEntity::getProviderId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        final Map<UUID, UserEntity> providersById = providerIds.isEmpty()
+                ? Collections.emptyMap()
+                : userRepository.findAllById(providerIds).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(UserEntity::getId, Function.identity()));
+
+        // 4) tickets cerrados (RESOLVED) asociados a los stocks
+        List<Long> pageStockIds = p.stream()
+                .map(StockEntity::getId)
+                .collect(Collectors.toList());
+
+        List<SupportTicketEntity> resolvedTickets = pageStockIds.isEmpty()
+                ? Collections.emptyList()
+                : supportTicketRepository.findByStockIdInAndStatusIn(pageStockIds, List.of("RESOLVED"));
+
+        Map<Long, SupportTicketEntity> ticketByStockId = resolvedTickets.stream()
+                .collect(Collectors.groupingBy(
+                        t -> t.getStock().getId(),
+                        Collectors.collectingAndThen(
+                                Collectors.maxBy(Comparator.comparing(
+                                        t -> t.getResolvedAt() != null ? t.getResolvedAt() : t.getUpdatedAt()
+                                )),
+                                opt -> opt.orElse(null)
+                        )
+                ));
+
+        // 5) mapear cada stock a StockResponse y enriquecer
+        Page<StockResponse> mapped = p.map(stock -> {
+            StockResponse dto = stockBuilder.toStockResponse(stock);
+
+            // provider enrichment
+            ProductEntity prod = stock.getProduct();
+            if (prod != null && prod.getProviderId() != null) {
+                UserEntity prov = providersById.get(prod.getProviderId());
+                if (prov != null) {
+                    dto.setProviderName(prov.getUsername());
+                    dto.setProviderPhone(prov.getPhone());
+                }
+            }
+
+            // soporte
+            SupportTicketEntity ticket = ticketByStockId.get(stock.getId());
+            if (ticket != null) {
+                dto.setSupportId(ticket.getId());
+                dto.setSupportType(ticket.getIssueType());
+                dto.setSupportStatus(ticket.getStatus());
+                dto.setSupportCreatedAt(ticket.getCreatedAt());
+                dto.setSupportUpdatedAt(ticket.getUpdatedAt());
+                dto.setSupportResolvedAt(ticket.getResolvedAt());
+                dto.setSupportResolutionNote(
+                        stock.getResolutionNote() != null ? stock.getResolutionNote() : ticket.getResolutionNote()
+                );
+            }
+
+            return dto;
+        });
+
+        return toPagedResponse(mapped);
+    }
 
 }

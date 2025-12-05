@@ -98,4 +98,16 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
                                                    @Param("excludedStockIds") Collection<Long> excludedStockIds,
                                                    Pageable pageable);
 
+    List<StockEntity> findByBuyerIdAndStatus(UUID buyerId, String status);
+
+    List<StockEntity> findByProductProviderIdAndStatus(UUID providerId, String status);
+
+    // traer stocks por buyer y estado
+    Page<StockEntity> findByBuyerIdAndStatus(UUID buyerId, String status, Pageable pageable);
+
+
+    // traer stocks por buyer y estado, excluyendo ciertos IDs
+    Page<StockEntity> findByBuyerIdAndStatusAndIdNotIn(UUID buyerId, String status, List<Long> excludedIds, Pageable pageable);
+
+
 }

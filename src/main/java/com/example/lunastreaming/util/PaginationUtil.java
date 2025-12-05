@@ -4,8 +4,6 @@ import com.example.lunastreaming.model.PagedResponse;
 import org.springframework.data.domain.Page;
 
 import java.util.Collections;
-import java.util.List;
-
 /**
  * Helpers para paginación: conversión de Spring Page<T> a PagedResponse<T>.
  */

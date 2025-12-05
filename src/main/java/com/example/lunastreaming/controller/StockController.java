@@ -133,6 +133,24 @@ public class StockController {
         return stockService.listProviderSales(principal, q, page, size, sort);
     }
 
+    @PatchMapping("/stocks/{stockId}/approve")
+    public ResponseEntity<StockResponse> approveStock(
+            @PathVariable Long stockId,
+            Principal principal
+    ) {
+        StockResponse result = stockService.approveStock(stockId, principal);
+        return ResponseEntity.ok(result);
+    }
 
+    @GetMapping("/refunds")
+    public PagedResponse<StockResponse> listRefunds(
+            Principal principal,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sort
+    ) {
+        return stockService.listRefunds(principal, q, page, size, sort);
+    }
 
 }

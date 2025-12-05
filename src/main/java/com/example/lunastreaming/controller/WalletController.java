@@ -3,7 +3,6 @@ package com.example.lunastreaming.controller;
 import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.service.WalletService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

@@ -258,7 +258,7 @@ public class SupportTicketService {
         SupportTicketEntity ticket = supportTicketRepository.findById(ticketId)
                 .orElseThrow(() -> new RuntimeException("Ticket not found"));
 
-        if (!"IN_PROCESS".equals(ticket.getStatus())) {
+        if (!"IN_PROGRESS".equals(ticket.getStatus())) {
             throw new RuntimeException("Ticket is not in IN_PROCESS state");
         }
 

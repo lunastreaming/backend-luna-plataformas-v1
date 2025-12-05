@@ -4,7 +4,6 @@ import com.example.lunastreaming.model.RefreshToken;
 import com.example.lunastreaming.repository.RefreshTokenRepository;
 import com.example.lunastreaming.util.TokenUtil;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;

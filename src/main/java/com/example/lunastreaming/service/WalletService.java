@@ -15,7 +15,6 @@ import org.springframework.http.HttpStatus;
 import com.example.lunastreaming.repository.UserRepository;
 import com.example.lunastreaming.repository.WalletTransactionRepository;
 import jakarta.transaction.Transactional;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;

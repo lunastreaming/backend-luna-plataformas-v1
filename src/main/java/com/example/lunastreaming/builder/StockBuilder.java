@@ -1,6 +1,5 @@
 package com.example.lunastreaming.builder;
 
-import com.example.lunastreaming.model.ProductEntity;
 import com.example.lunastreaming.model.StockEntity;
 import com.example.lunastreaming.model.StockResponse;
 import org.springframework.stereotype.Component;
@@ -11,8 +10,6 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
-
-import static java.math.BigDecimal.ZERO;
 
 
 @Component

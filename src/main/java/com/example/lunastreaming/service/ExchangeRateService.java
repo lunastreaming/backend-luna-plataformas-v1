@@ -3,7 +3,6 @@ package com.example.lunastreaming.service;
 import com.example.lunastreaming.model.ExchangeRate;
 import com.example.lunastreaming.repository.ExchangeRateRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
