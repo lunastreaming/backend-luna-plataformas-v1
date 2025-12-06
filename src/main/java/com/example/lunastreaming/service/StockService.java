@@ -167,13 +167,36 @@ public class StockService {
     public StockResponse updateStock(Long id, StockResponse updated) {
         StockEntity stock = stockRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Stock no encontrado"));
-        stock.setUsername(updated.getUsername());
-        stock.setPassword(updated.getPassword());
-        stock.setUrl(updated.getUrl());
-        stock.setTipo(updated.getType());
-        stock.setNumeroPerfil(updated.getNumberProfile());
-        stock.setPin(updated.getPin());
-        stock.setStatus(updated.getStatus());
+
+        if (updated.getUsername() != null) {
+            stock.setUsername(updated.getUsername());
+        }
+        if (updated.getPassword() != null) {
+            stock.setPassword(updated.getPassword());
+        }
+        if (updated.getUrl() != null) {
+            stock.setUrl(updated.getUrl());
+        }
+        if (updated.getType() != null) {
+            stock.setTipo(updated.getType());
+        }
+        if (updated.getNumberProfile() != null) {
+            stock.setNumeroPerfil(updated.getNumberProfile());
+        }
+        if (updated.getPin() != null) {
+            stock.setPin(updated.getPin());
+        }
+        if (updated.getStatus() != null) {
+            stock.setStatus(updated.getStatus());
+        }
+
+        if (updated.getSupportResolutionNote() != null) {
+            stock.setResolutionNote(updated.getStatus());
+        }
+
+        // 👆 De esta forma, si el campo viene en null, se conserva el valor anterior
+        // y no se pisa con null.
+
         return stockBuilder.toStockResponse(stockRepository.save(stock));
     }
 
@@ -620,20 +643,40 @@ public class StockService {
 
         return stocks.stream()
                 .filter(s -> Boolean.TRUE.equals(s.getProduct().getIsOnRequest()))
-                .map(stockBuilder::toStockResponse)
+                .map(s -> {
+                    // Construyes la respuesta base
+                    StockResponse resp = stockBuilder.toStockResponse(s);
+
+                    // Resuelves el proveedor a partir del product.providerId
+                    UUID providerId = s.getProduct().getProviderId();
+                    userRepository.findById(providerId).ifPresent(provider -> {
+                        resp.setProviderName(provider.getUsername());
+                        resp.setProviderPhone(provider.getPhone());
+                    });
+
+                    return resp;
+                })
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<StockResponse> getProviderOnRequestPending(Principal principal) {
         UUID providerId = resolveUserIdFromPrincipal(principal);
+        UserEntity provider = userRepository.findById(providerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
 
         List<StockEntity> stocks = stockRepository
                 .findByProductProviderIdAndStatus(providerId, "requested");
 
         return stocks.stream()
                 .filter(s -> Boolean.TRUE.equals(s.getProduct().getIsOnRequest()))
-                .map(stockBuilder::toStockResponse)
+                .map(s -> {
+                    StockResponse resp = stockBuilder.toStockResponse(s);
+                    resp.setProviderName(provider.getUsername());
+                    resp.setProviderPhone(provider.getPhone());
+                    return resp;
+                })
+
                 .toList();
     }
 
@@ -727,6 +770,45 @@ public class StockService {
         });
 
         return toPagedResponse(mapped);
+    }
+
+    @Transactional
+    public StockResponse sellRequestedStock(Long id, StockResponse updated, Principal principal) {
+        StockEntity stock = stockRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Stock no encontrado"));
+
+        // Validar que el actor es el proveedor dueño del producto
+        UUID providerIdFromPrincipal = resolveUserIdFromPrincipal(principal);
+        if (!providerIdFromPrincipal.equals(stock.getProduct().getProviderId())) {
+            throw new IllegalStateException("actor_not_provider_of_stock");
+        }
+
+        // Solo permitir transición desde requested
+        if (!"requested".equalsIgnoreCase(stock.getStatus())) {
+            throw new IllegalStateException("stock_not_in_requested_state");
+        }
+
+        // Actualizar campos igual que updateStock
+        stock.setUsername(updated.getUsername());
+        stock.setPassword(updated.getPassword());
+        stock.setUrl(updated.getUrl());
+        stock.setTipo(updated.getType());
+        stock.setNumeroPerfil(updated.getNumberProfile());
+        stock.setPin(updated.getPin());
+
+        // 🚩 Ahora sí establecer fechas de inicio y fin
+        Instant now = Instant.now();
+        stock.setStartAt(now);
+        Integer days = stock.getProduct().getDays() == null ? 0 : stock.getProduct().getDays();
+        stock.setEndAt(days > 0 ? now.plus(days, ChronoUnit.DAYS) : null);
+
+        // Cambiar estado a sold
+        stock.setStatus("sold");
+
+        // Guardar nota adicional
+        stock.setResolutionNote(updated.getSupportResolutionNote());
+
+        return stockBuilder.toStockResponse(stockRepository.save(stock));
     }
 
 }

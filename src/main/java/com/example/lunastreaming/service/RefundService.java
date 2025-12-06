@@ -8,11 +8,13 @@ import com.example.lunastreaming.repository.StockRepository;
 import com.example.lunastreaming.repository.UserRepository;
 import com.example.lunastreaming.repository.WalletTransactionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.security.Principal;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -294,5 +296,226 @@ public class RefundService {
         return resp;
     }
 
+
+    @Transactional
+    public Map<String, Object> refundStockAsProvider(Long stockId, UUID buyerId, Principal principal) {
+        // 1) cargar stock
+        StockEntity stock = stockRepository.findById(stockId)
+                .orElseThrow(() -> new IllegalArgumentException("stock_not_found"));
+
+        // 2) validar que el actor es el proveedor del producto
+        UUID providerIdFromPrincipal = resolveUserIdFromPrincipal(principal);
+        if (!providerIdFromPrincipal.equals(stock.getProduct().getProviderId())) {
+            throw new IllegalStateException("actor_not_provider_of_stock");
+        }
+
+        // 3) obtener buyer (igual que admin)
+        UserEntity buyer = stock.getBuyer();
+        if (buyer == null && buyerId == null) {
+            throw new IllegalArgumentException("buyer_not_found");
+        }
+        if (buyerId != null) {
+            if (buyer != null && !buyer.getId().equals(buyerId)) {
+                throw new IllegalArgumentException("buyer_mismatch");
+            }
+            if (buyer == null) {
+                buyer = userRepository.findById(buyerId)
+                        .orElseThrow(() -> new IllegalArgumentException("buyer_not_found"));
+            }
+        }
+
+        // 4) obtener provider desde principal
+        UserEntity provider = userRepository.findById(providerIdFromPrincipal)
+                .orElseThrow(() -> new IllegalArgumentException("provider_not_found"));
+
+        // 5) calcular refund (misma lógica que admin)
+        BigDecimal refund = ZERO;
+        if (stock.getEndAt() != null) {
+            BigDecimal productPrice = stock.getProduct().getSalePrice();
+            Integer productDays = stock.getProduct().getDays();
+            refund = computeRefund(productPrice, productPrice, productDays, stock.getEndAt(), ZERO);
+        }
+        if (refund == null || refund.compareTo(ZERO) <= 0) {
+            throw new IllegalStateException("refund_amount_zero");
+        }
+        refund = refund.setScale(2, RoundingMode.HALF_UP);
+
+        // 6) marcar stock como REFUND
+        stock.setStatus("REFUND");
+        stockRepository.save(stock);
+
+        // 7) transacciones wallet (igual que admin)
+        Instant now = Instant.now();
+        WalletTransaction txCredit = WalletTransaction.builder()
+                .user(buyer)
+                .type("refund")
+                .amount(refund)
+                .currency("PEN")
+                .status("approved")
+                .createdAt(now)
+                .description("Reembolso por stock id " + stockId)
+                .realAmount(refund)
+                .build();
+
+        WalletTransaction txDebit = WalletTransaction.builder()
+                .user(provider)
+                .type("refund")
+                .amount(refund.negate())
+                .currency("PEN")
+                .status("approved")
+                .createdAt(now)
+                .description("Descuento por reembolso stock id " + stockId)
+                .realAmount(refund.negate())
+                .build();
+
+        WalletTransaction savedCredit = walletTransactionRepository.save(txCredit);
+        WalletTransaction savedDebit = walletTransactionRepository.save(txDebit);
+
+        // 8) actualizar balances con locking
+        UserEntity buyerLocked = userRepository.findByIdForUpdate(buyer.getId())
+                .orElseThrow(() -> new IllegalStateException("buyer_not_found_for_update"));
+        buyerLocked.setBalance(safeAdd(buyerLocked.getBalance(), refund).setScale(2, RoundingMode.HALF_UP));
+        userRepository.save(buyerLocked);
+
+        UserEntity providerLocked = userRepository.findByIdForUpdate(provider.getId())
+                .orElseThrow(() -> new IllegalStateException("provider_not_found_for_update"));
+        providerLocked.setBalance(safeSubtract(providerLocked.getBalance(), refund).setScale(2, RoundingMode.HALF_UP));
+        userRepository.save(providerLocked);
+
+        // 9) devolver resumen
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("stockId", stockId);
+        resp.put("refundAmount", refund);
+        resp.put("creditTxId", savedCredit.getId());
+        resp.put("debitTxId", savedDebit.getId());
+        resp.put("status", stock.getStatus());
+        resp.put("buyerNewBalance", buyerLocked.getBalance());
+        resp.put("providerNewBalance", providerLocked.getBalance());
+        return resp;
+    }
+
+    @Transactional
+    public Map<String, Object> refundStockFullAsProvider(Long stockId, UUID buyerId, Principal principal) {
+        // 1) cargar stock
+        StockEntity stock = stockRepository.findById(stockId)
+                .orElseThrow(() -> new IllegalArgumentException("stock_not_found"));
+
+        // 2) validar que el actor es el proveedor del producto
+        UUID providerIdFromPrincipal = resolveUserIdFromPrincipal(principal);
+        ProductEntity product = stock.getProduct();
+        if (product == null) {
+            throw new IllegalStateException("product_not_found_on_stock");
+        }
+        if (!providerIdFromPrincipal.equals(product.getProviderId())) {
+            throw new IllegalStateException("actor_not_provider_of_stock");
+        }
+
+        // 3) resolver buyer (igual que en el flujo admin)
+        UserEntity buyer = stock.getBuyer();
+        if (buyer == null && buyerId == null) {
+            throw new IllegalArgumentException("buyer_not_found");
+        }
+        if (buyerId != null) {
+            if (buyer != null && !buyer.getId().equals(buyerId)) {
+                throw new IllegalArgumentException("buyer_mismatch");
+            }
+            if (buyer == null) {
+                buyer = userRepository.findById(buyerId)
+                        .orElseThrow(() -> new IllegalArgumentException("buyer_not_found"));
+            }
+        }
+
+        // 4) obtener provider desde principal
+        UserEntity provider = userRepository.findById(providerIdFromPrincipal)
+                .orElseThrow(() -> new IllegalArgumentException("provider_not_found"));
+
+        // 5) monto de reembolso: precio completo del producto
+        BigDecimal productPrice = product.getSalePrice();
+        if (productPrice == null || productPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("invalid_product_price");
+        }
+        BigDecimal refund = productPrice.setScale(2, RoundingMode.HALF_UP);
+
+        // 6) marcar stock como REFUND
+        stock.setStatus("REFUND");
+        stockRepository.save(stock);
+
+        // 7) crear transacciones wallet: crédito al buyer y débito al provider
+        Instant now = Instant.now();
+
+        WalletTransaction txCredit = WalletTransaction.builder()
+                .user(buyer)
+                .type("refund")
+                .amount(refund)
+                .currency("PEN")
+                .exchangeApplied(false)
+                .exchangeRate(null)
+                .status("approved")
+                .createdAt(now)
+                .description("Reembolso completo por stock id " + stockId)
+                .realAmount(refund)
+                .build();
+
+        WalletTransaction txDebit = WalletTransaction.builder()
+                .user(provider)
+                .type("refund")
+                .amount(refund.negate())
+                .currency("PEN")
+                .exchangeApplied(false)
+                .exchangeRate(null)
+                .status("approved")
+                .createdAt(now)
+                .description("Descuento por reembolso completo stock id " + stockId)
+                .realAmount(refund.negate())
+                .build();
+
+        WalletTransaction savedCredit = walletTransactionRepository.save(txCredit);
+        WalletTransaction savedDebit = walletTransactionRepository.save(txDebit);
+
+        // 8) actualizar balances con locking
+        UserEntity buyerLocked = userRepository.findByIdForUpdate(buyer.getId())
+                .orElseThrow(() -> new IllegalStateException("buyer_not_found_for_update"));
+        BigDecimal newBuyerBalance = safeAdd(buyerLocked.getBalance(), refund);
+        buyerLocked.setBalance(newBuyerBalance.setScale(2, RoundingMode.HALF_UP));
+        userRepository.save(buyerLocked);
+
+        UserEntity providerLocked = userRepository.findByIdForUpdate(provider.getId())
+                .orElseThrow(() -> new IllegalStateException("provider_not_found_for_update"));
+        BigDecimal newProviderBalance = safeSubtract(providerLocked.getBalance(), refund);
+        // valida saldo negativo si tu negocio lo requiere
+        // if (newProviderBalance.compareTo(BigDecimal.ZERO) < 0) throw new IllegalStateException("provider_insufficient_balance");
+        providerLocked.setBalance(newProviderBalance.setScale(2, RoundingMode.HALF_UP));
+        userRepository.save(providerLocked);
+
+        // 9) devolver resumen
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("stockId", stockId);
+        resp.put("refundAmount", refund);
+        resp.put("creditTxId", savedCredit.getId());
+        resp.put("debitTxId", savedDebit.getId());
+        resp.put("status", stock.getStatus());
+        resp.put("buyerNewBalance", buyerLocked.getBalance());
+        resp.put("providerNewBalance", providerLocked.getBalance());
+        return resp;
+    }
+
+
+    public UUID resolveUserIdFromPrincipal(Principal principal) {
+        if (principal == null || principal.getName() == null) {
+            throw new AccessDeniedException("Principal no presente");
+        }
+
+        String name = principal.getName();
+
+        try {
+            // Si el principal ya contiene el UUID directamente
+            return UUID.fromString(name);
+        } catch (IllegalArgumentException ex) {
+            // Si no es UUID, buscar por username
+            UserEntity user = userRepository.findByUsername(name)
+                    .orElseThrow(() -> new AccessDeniedException("Usuario no encontrado: " + name));
+            return user.getId(); // o user.getProviderId() si aplica
+        }
+    }
 
 }
