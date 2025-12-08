@@ -71,7 +71,7 @@ public class RefundService {
         // 5) calcular refund usando la lógica existente
         BigDecimal refund = ZERO;
         if (stock.getEndAt() != null) {
-            BigDecimal productPrice = product.getSalePrice();
+            BigDecimal productPrice = stock.getPurchasePrice();
             Integer productDays = product.getDays();
             refund = computeRefund(productPrice, productPrice, productDays, stock.getEndAt(), ZERO);
         }
@@ -227,7 +227,7 @@ public class RefundService {
                 .orElseThrow(() -> new IllegalArgumentException("provider_not_found"));
 
         // 5) monto de reembolso: precio completo del producto
-        BigDecimal productPrice = product.getSalePrice();
+        BigDecimal productPrice = stock.getPurchasePrice();
         if (productPrice == null || productPrice.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("invalid_product_price");
         }
@@ -331,7 +331,7 @@ public class RefundService {
         // 5) calcular refund (misma lógica que admin)
         BigDecimal refund = ZERO;
         if (stock.getEndAt() != null) {
-            BigDecimal productPrice = stock.getProduct().getSalePrice();
+            BigDecimal productPrice = stock.getPurchasePrice();
             Integer productDays = stock.getProduct().getDays();
             refund = computeRefund(productPrice, productPrice, productDays, stock.getEndAt(), ZERO);
         }
@@ -430,7 +430,7 @@ public class RefundService {
                 .orElseThrow(() -> new IllegalArgumentException("provider_not_found"));
 
         // 5) monto de reembolso: precio completo del producto
-        BigDecimal productPrice = product.getSalePrice();
+        BigDecimal productPrice = stock.getPurchasePrice();
         if (productPrice == null || productPrice.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("invalid_product_price");
         }

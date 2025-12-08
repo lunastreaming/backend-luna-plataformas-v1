@@ -3,6 +3,7 @@ package com.example.lunastreaming.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 
@@ -57,5 +58,12 @@ public class StockEntity {
 
     @Column(name = "resolution_note")
     private String resolutionNote;
+
+    @Column(name = "purchase_price", nullable = false, precision = 19, scale = 2)
+    private BigDecimal purchasePrice = BigDecimal.ZERO;
+
+    @Column(name = "renewed_at")
+    private Instant renewedAt;
+
 
 }

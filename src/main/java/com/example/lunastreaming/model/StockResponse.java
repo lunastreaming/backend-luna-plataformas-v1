@@ -59,5 +59,13 @@ public class StockResponse {
     private String supportResolutionNote;
 
 
+    //price
+
+    private BigDecimal purchasePrice;
+
+    private Boolean renewable;
+    private BigDecimal renewalPrice;
+
+
 
 }

@@ -153,4 +153,15 @@ public class StockController {
         return stockService.listRefunds(principal, q, page, size, sort);
     }
 
+
+    @PostMapping("/{stockId}/renew")
+    public ResponseEntity<StockResponse> renewStock(
+            @PathVariable Long stockId,
+            @RequestBody RenewRequest request,
+            Principal principal
+    ) {
+        StockResponse result = stockService.renewStock(stockId, request, principal);
+        return ResponseEntity.ok(result);
+    }
+
 }

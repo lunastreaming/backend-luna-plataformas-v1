@@ -1,10 +1,7 @@
 package com.example.lunastreaming.controller;
 
 import com.example.lunastreaming.model.*;
-import com.example.lunastreaming.service.RefundService;
-import com.example.lunastreaming.service.StockService;
-import com.example.lunastreaming.service.UserService;
-import com.example.lunastreaming.service.WalletService;
+import com.example.lunastreaming.service.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,6 +23,7 @@ public class AdminController {
     private final WalletService walletService;
     private final StockService stockService;
     private final RefundService refundService;
+    private final ProviderProfileService providerProfileService;
 
     // PATCH porque estamos modificando parcialmente el recurso (solo password)
     @PatchMapping("/{id}/password")
@@ -97,6 +95,21 @@ public class AdminController {
         Map<String, Object> result = refundService.refundStockFullAsAdmin(stockId, buyerId, principal != null ? principal.getName() : null);
         return ResponseEntity.ok(result);
     }
+
+    @PatchMapping("/{userId}/enable-transfer")
+    public ResponseEntity<ProviderProfileDTO> enableTransfer(@PathVariable UUID userId) {
+        ProviderProfileEntity profile = providerProfileService.enableTransfer(userId);
+        return ResponseEntity.ok(toDTO(profile));
+    }
+
+    private ProviderProfileDTO toDTO(ProviderProfileEntity entity) {
+        return ProviderProfileDTO.builder()
+                .id(entity.getId())
+                .userId(entity.getUser().getId())
+                .canTransfer(entity.getCanTransfer())
+                .build();
+    }
+
 
 
 }

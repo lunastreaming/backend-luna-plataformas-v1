@@ -334,6 +334,7 @@ public class StockService {
         stock.setClientName(req.getClientName());
         stock.setClientPhone(req.getClientPhone());
         stock.setSoldAt(Timestamp.from(Instant.now()));
+        stock.setPurchasePrice(price);
 
         if (Boolean.TRUE.equals(product.getIsOnRequest())) {
             // 🚩 Caso bajo pedido: no iniciar fechas aún
@@ -397,18 +398,21 @@ public class StockService {
         // 1) obtener stockIds que tienen tickets en estado activo (OPEN, IN_PROGRESS)
         List<Long> excludedStockIds = stockRepository.findStockIdsByStatusIn(List.of("OPEN", "IN_PROGRESS"));
 
+        // 2) estados que queremos listar (SOLD + RENEWED)
+        List<String> allowedStatuses = List.of("sold", "RENEWED");
+
         Page<StockEntity> p;
 
-        // 2) elegir la consulta adecuada según si hay excludedStockIds
+        // 3) elegir la consulta adecuada según si hay excludedStockIds
         if (excludedStockIds == null || excludedStockIds.isEmpty()) {
-            // traer SOLO stocks del cliente con estado SOLD
-            p = stockRepository.findByBuyerIdAndStatus(buyerId, "sold", pageable);
+            // traer SOLO stocks del cliente con estado SOLD o RENEWED
+            p = stockRepository.findByBuyerIdAndStatusIn(buyerId, allowedStatuses, pageable);
         } else {
-            // traer SOLO stocks del cliente con estado SOLD y excluir los que tienen tickets activos
-            p = stockRepository.findByBuyerIdAndStatusAndIdNotIn(buyerId, "sold", excludedStockIds, pageable);
+            // traer SOLO stocks del cliente con estado SOLD o RENEWED y excluir los que tienen tickets activos
+            p = stockRepository.findByBuyerIdAndStatusInAndIdNotIn(buyerId, allowedStatuses, excludedStockIds, pageable);
         }
 
-        // 3) provider enrichment (batch)
+        // 4) provider enrichment (batch)
         Set<UUID> providerIds = p.stream()
                 .map(StockEntity::getProduct)
                 .filter(Objects::nonNull)
@@ -422,7 +426,7 @@ public class StockService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(UserEntity::getId, Function.identity()));
 
-        // 4) obtener stockIds de la página resultante para cargar tickets cerrados (RESOLVED)
+        // 5) obtener stockIds de la página resultante para cargar tickets cerrados (RESOLVED)
         List<Long> pageStockIds = p.stream()
                 .map(StockEntity::getId)
                 .collect(Collectors.toList());
@@ -431,7 +435,7 @@ public class StockService {
                 ? Collections.emptyList()
                 : supportTicketRepository.findByStockIdInAndStatusIn(pageStockIds, List.of("RESOLVED"));
 
-        // 5) mapear stockId -> ticket preferido (más reciente por resolvedAt)
+        // 6) mapear stockId -> ticket preferido (más reciente por resolvedAt)
         Map<Long, SupportTicketEntity> ticketByStockId = resolvedTickets.stream()
                 .collect(Collectors.groupingBy(
                         t -> t.getStock().getId(),
@@ -443,7 +447,7 @@ public class StockService {
                         )
                 ));
 
-        // 6) mapear cada stock a StockResponse y enriquecer con provider y soporte
+        // 7) mapear cada stock a StockResponse y enriquecer con provider y soporte
         Page<StockResponse> mapped = p.map(stock -> {
             StockResponse dto = stockBuilder.toStockResponse(stock);
 
@@ -810,5 +814,155 @@ public class StockService {
 
         return stockBuilder.toStockResponse(stockRepository.save(stock));
     }
+
+    @Transactional
+    public StockResponse renewStock(Long stockId, RenewRequest req, Principal principal) {
+        UUID buyerId = resolveUserIdFromPrincipal(principal);
+
+        UserEntity buyer = userRepository.findById(buyerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comprador no encontrado"));
+
+        if (!passwordEncoder.matches(req.getPassword(), buyer.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña ingresada es incorrecta");
+        }
+
+        StockEntity stock = stockRepository.findById(stockId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Stock no encontrado"));
+
+        ProductEntity product = stock.getProduct();
+        if (product == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Producto no asociado");
+        }
+
+        // Validar que el producto sea renovable
+        if (!Boolean.TRUE.equals(product.getIsRenewable())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El producto no permite renovaciones");
+        }
+
+        BigDecimal renewalPrice = product.getRenewalPrice();
+        if (renewalPrice == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El producto no tiene precio de renovación definido");
+        }
+
+        // Validar saldo
+        if (buyer.getBalance().compareTo(renewalPrice) < 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Saldo insuficiente");
+        }
+
+        // Descontar saldo comprador
+        buyer.setBalance(buyer.getBalance().subtract(renewalPrice));
+        userRepository.save(buyer);
+
+        // Registrar transacción de renovación
+        walletTransactionRepository.save(WalletTransaction.builder()
+                .user(buyer)
+                .type("renewal")
+                .amount(renewalPrice.negate())
+                .currency("USD")
+                .status("approved")
+                .createdAt(Instant.now())
+                .approvedAt(Instant.now())
+                .description("Renovación de stock del producto: " + product.getName())
+                .exchangeApplied(false)
+                .build());
+
+        // Acreditar proveedor
+        UserEntity provider = userRepository.findById(product.getProviderId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
+
+        provider.setBalance(provider.getBalance().add(renewalPrice));
+        userRepository.save(provider);
+
+        walletTransactionRepository.save(WalletTransaction.builder()
+                .user(provider)
+                .type("sale")
+                .amount(renewalPrice)
+                .currency("USD")
+                .status("approved")
+                .createdAt(Instant.now())
+                .approvedAt(Instant.now())
+                .description("Renovación de stock del producto: " + product.getName())
+                .exchangeApplied(false)
+                .build());
+
+        // Actualizar fechas del stock y estado
+        Instant now = Instant.now();
+        Integer days = product.getDays() == null ? 0 : product.getDays();
+
+        if (stock.getEndAt() == null || stock.getEndAt().isBefore(now)) {
+            // Expirado: reiniciar fechas
+            stock.setStartAt(now);
+            stock.setEndAt(days > 0 ? now.plus(days, ChronoUnit.DAYS) : null);
+            stock.setStatus("RENEWED"); // 🚩 nuevo estado explícito
+        } else {
+            // Vigente: sumar días a la fecha fin
+            stock.setEndAt(stock.getEndAt().plus(days, ChronoUnit.DAYS));
+            stock.setStatus("RENEWED"); // 🚩 mantenemos activo  // puede ser active
+        }
+
+        // Acumular purchasePrice con la renovación
+        stock.setPurchasePrice(stock.getPurchasePrice().add(renewalPrice));
+
+        stockRepository.save(stock);
+        return stockBuilder.toStockResponse(stock);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StockResponse> getProviderRenewedStocks(Principal principal) {
+        UUID providerId = resolveUserIdFromPrincipal(principal);
+
+        UserEntity provider = userRepository.findById(providerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
+
+        // 🚩 Buscar stocks del proveedor con estado RENEWED
+        List<StockEntity> stocks = stockRepository
+                .findByProductProviderIdAndStatus(providerId, "RENEWED");
+
+        return stocks.stream()
+                .map(s -> {
+                    StockResponse resp = stockBuilder.toStockResponse(s);
+                    resp.setProviderName(provider.getUsername());
+                    resp.setProviderPhone(provider.getPhone());
+                    return resp;
+                })
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<StockResponse> getExpiredStocks(Principal principal, Pageable pageable) {
+        UUID providerId = resolveUserIdFromPrincipal(principal);
+
+        UserEntity provider = userRepository.findById(providerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
+
+        Instant now = Instant.now();
+
+        // 🚩 Opción 1: usar repository con query paginada
+        Page<StockEntity> stocks = stockRepository.findExpiredStocks(providerId, now, pageable);
+
+        return stocks.map(s -> {
+            StockResponse resp = stockBuilder.toStockResponse(s);
+            resp.setProviderName(provider.getUsername());
+            resp.setProviderPhone(provider.getPhone());
+            resp.setStatus("EXPIRED"); // opcional: marcar explícitamente
+            return resp;
+        });
+    }
+
+    @Transactional
+    public void approveRenewal(Long id) {
+        StockEntity stock = stockRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Stock no encontrado con id " + id));
+
+        if (!"RENEWED".equals(stock.getStatus())) {
+            throw new IllegalStateException("El stock no está en estado RENEWED");
+        }
+
+        stock.setStatus("sold");
+        stock.setRenewedAt(Instant.now());
+
+        stockRepository.save(stock);
+    }
+
 
 }

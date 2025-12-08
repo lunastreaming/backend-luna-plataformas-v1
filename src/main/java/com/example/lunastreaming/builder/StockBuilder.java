@@ -20,9 +20,13 @@ public class StockBuilder {
 
         UUID productId = null;
         String productName = null;
+        Boolean renewable = null;
+        BigDecimal renewalPrice = stockEntity.getPurchasePrice();
         if (stockEntity.getProduct() != null) {
             productId = stockEntity.getProduct().getId();
             productName = stockEntity.getProduct().getName();
+            renewable = stockEntity.getProduct().getIsRenewable();
+            renewalPrice = stockEntity.getProduct().getRenewalPrice();
         }
 
         UUID buyerId = null;
@@ -40,7 +44,7 @@ public class StockBuilder {
         BigDecimal refund = ZERO;
 
         if (stockEntity.getEndAt() != null) {
-            BigDecimal productPrice = stockEntity.getProduct() != null ? stockEntity.getProduct().getSalePrice() : null;
+            BigDecimal productPrice = stockEntity.getPurchasePrice() != null ? stockEntity.getPurchasePrice() : null;
             Integer productDays = stockEntity.getProduct() != null ? stockEntity.getProduct().getDays() : null;
             refund = computeRefund(productPrice, productPrice, productDays, stockEntity.getEndAt(), BigDecimal.ZERO);
         }
@@ -49,7 +53,6 @@ public class StockBuilder {
         Integer daysRemaining = null;
         if (stockEntity.getEndAt() != null) {
             daysRemaining = computeDaysBetween(Instant.now(), stockEntity.getEndAt(), true);
-            if (daysRemaining < 0) daysRemaining = 0;
         }
 
         return StockResponse
@@ -75,6 +78,9 @@ public class StockBuilder {
                 .daysRemaining(daysRemaining)
                 .refund(refund)
                 .amount(stockEntity.getProduct().getSalePrice())
+                .purchasePrice(stockEntity.getPurchasePrice())
+                .renewable(renewable)
+                .renewalPrice(renewalPrice)
                 .build();
     }
 
@@ -130,13 +136,12 @@ public class StockBuilder {
         double days = (double) seconds / SECONDS_PER_DAY;
         if (ceilPositive) {
             long ceil = (long) Math.ceil(days);
-            return Math.toIntExact(Math.max(0, ceil));
+            return Math.toIntExact(ceil);
         } else {
             long floor = (long) Math.floor(days);
-            return Math.toIntExact(Math.max(0, floor));
+            return Math.toIntExact(floor);
         }
     }
-
     /**
      * Mapea una fila Object[] (resultado del SELECT nativo) a StockResponse.
      * El orden de índices debe coincidir exactamente con el SELECT del repository.

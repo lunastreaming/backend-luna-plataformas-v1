@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -110,4 +111,12 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     Page<StockEntity> findByBuyerIdAndStatusAndIdNotIn(UUID buyerId, String status, List<Long> excludedIds, Pageable pageable);
 
 
+    @Query("SELECT s FROM StockEntity s WHERE s.product.providerId = :providerId AND s.endAt < :now")
+    Page<StockEntity> findExpiredStocks(@Param("providerId") UUID providerId,
+                                        @Param("now") Instant now,
+                                        Pageable pageable);
+
+    Page<StockEntity> findByBuyerIdAndStatusIn(UUID buyerId, List<String> statuses, Pageable pageable);
+
+    Page<StockEntity> findByBuyerIdAndStatusInAndIdNotIn(UUID buyerId, List<String> statuses, List<Long> excludedIds, Pageable pageable);
 }

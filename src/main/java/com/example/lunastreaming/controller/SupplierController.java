@@ -5,10 +5,14 @@ import com.example.lunastreaming.model.StockResponse;
 import com.example.lunastreaming.service.RefundService;
 import com.example.lunastreaming.service.StockService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -50,6 +54,35 @@ public class SupplierController {
             Principal principal
     ) {
         return ResponseEntity.ok(stockService.sellRequestedStock(id, stock, principal));
+    }
+
+    @GetMapping("/sales/provider/renewed")
+    public ResponseEntity<List<StockResponse>> getProviderRenewedStocks(
+            Principal principal
+    ) {
+        List<StockResponse> result = stockService.getProviderRenewedStocks(principal);
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/supplier/stocks/expired")
+    public ResponseEntity<Page<StockResponse>> getExpiredStocks(
+            Principal principal,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        Page<StockResponse> result = stockService.getExpiredStocks(principal, pageable);
+        return ResponseEntity.ok(result);
+    }
+
+    @PatchMapping("/{id}/renewal/approve")
+    public ResponseEntity<Void> approveRenewal(@PathVariable Long id) {
+        try {
+            stockService.approveRenewal(id);
+            return ResponseEntity.noContent().build(); // 204 No Content
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build(); // 404
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().build(); // 400
+        }
     }
 
 
