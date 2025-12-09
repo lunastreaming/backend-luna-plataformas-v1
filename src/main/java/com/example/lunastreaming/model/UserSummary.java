@@ -23,4 +23,6 @@ public class UserSummary {
     public String status;
     public Integer referralsCount;
 
+    public Boolean canTransfer;
+
 }

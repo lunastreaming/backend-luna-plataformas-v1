@@ -2,8 +2,10 @@ package com.example.lunastreaming.controller;
 
 import com.example.lunastreaming.model.RefundRequest;
 import com.example.lunastreaming.model.StockResponse;
+import com.example.lunastreaming.model.TransferRequest;
 import com.example.lunastreaming.service.RefundService;
 import com.example.lunastreaming.service.StockService;
+import com.example.lunastreaming.service.SupplierService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,6 +13,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +26,7 @@ public class SupplierController {
 
     private final RefundService refundService;
     private final StockService stockService;
+    private final SupplierService supplierService;
 
     @PostMapping("/provider/stocks/{stockId}/refund")
     public ResponseEntity<Map<String, Object>> refundStockAsProvider(
@@ -83,6 +87,27 @@ public class SupplierController {
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().build(); // 400
         }
+    }
+
+
+    @PostMapping("/transfer-to-user")
+    public ResponseEntity<Void> transfer(
+            Principal principal,
+            @RequestBody TransferRequest request) {
+
+        // Validación básica
+        if (request.getAmount() == null || request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        // El supplier es el usuario autenticado
+        UUID supplierId = UUID.fromString(principal.getName());
+
+        // Ejecutar la transferencia (service genera dos WalletTransaction)
+        supplierService.transfer(supplierId, request.getSellerId(), request.getAmount());
+
+        // No devolvemos nada → 204 No Content
+        return ResponseEntity.noContent().build();
     }
 
 

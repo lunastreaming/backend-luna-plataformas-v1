@@ -242,6 +242,11 @@ public class UserService {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
+        Boolean canTransfer = false;
+        if (Objects.equals(user.getRole(), "provider")) {
+            canTransfer = user.getProviderProfile().getCanTransfer();
+        }
+
         return UserSummary.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -251,6 +256,7 @@ public class UserService {
                 .salesCount(user.getSalesCount())
                 .status(user.getStatus())
                 .referralsCount(user.getReferralsCount())
+                .canTransfer(canTransfer)
                 .build();
     }
 

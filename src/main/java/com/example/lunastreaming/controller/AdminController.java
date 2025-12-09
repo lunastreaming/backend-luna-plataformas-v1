@@ -97,8 +97,8 @@ public class AdminController {
     }
 
     @PatchMapping("/{userId}/enable-transfer")
-    public ResponseEntity<ProviderProfileDTO> enableTransfer(@PathVariable UUID userId) {
-        ProviderProfileEntity profile = providerProfileService.enableTransfer(userId);
+    public ResponseEntity<ProviderProfileDTO> enableTransfer(@PathVariable UUID userId, Principal principal) {
+        ProviderProfileEntity profile = providerProfileService.enableTransfer(userId, principal);
         return ResponseEntity.ok(toDTO(profile));
     }
 

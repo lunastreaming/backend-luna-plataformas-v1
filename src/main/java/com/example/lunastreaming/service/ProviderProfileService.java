@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.Principal;
 import java.util.UUID;
 
 @Service
@@ -18,16 +19,16 @@ public class ProviderProfileService {
     private final ProviderProfileRepository providerProfileRepository;
 
     @Transactional
-    public ProviderProfileEntity enableTransfer(UUID userId) {
-        UserEntity user = userRepository.findById(userId)
+    public ProviderProfileEntity enableTransfer(UUID userId, Principal principal) {
+        UserEntity userAdmin = userRepository.findById(UUID.fromString(principal.getName()))
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         // Validar que el que ejecuta sea admin
-        if (!"admin".equalsIgnoreCase(user.getRole())) {
+        if (!"admin".equalsIgnoreCase(userAdmin.getRole())) {
             throw new RuntimeException("Only admin can enable transfer");
         }
 
-        ProviderProfileEntity profile = providerProfileRepository.findById(userId)
+        ProviderProfileEntity profile = providerProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Provider profile not found"));
 
         profile.setCanTransfer(true);

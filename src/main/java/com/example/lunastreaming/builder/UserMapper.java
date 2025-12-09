@@ -8,6 +8,11 @@ public class UserMapper {
     public static UserSummary toSummary(UserEntity user) {
         if (user == null) return null;
 
+        Boolean canTransfer = false;
+        if (user.getProviderProfile() != null && user.getProviderProfile().getUser() != null) {
+            canTransfer = user.getProviderProfile().getCanTransfer();
+        }
+
         return UserSummary
                 .builder()
                 .id(user.getId())
@@ -18,6 +23,7 @@ public class UserMapper {
                 .salesCount(user.getSalesCount())
                 .status(user.getStatus())
                 .referralsCount(user.getReferralsCount())
+                .canTransfer(canTransfer)
                 .build();
     }
 
