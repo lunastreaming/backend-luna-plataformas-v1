@@ -6,6 +6,9 @@ import com.example.lunastreaming.model.StockResponse;
 import com.example.lunastreaming.model.SupportTicketDTO;
 import com.example.lunastreaming.service.SupportTicketService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -63,8 +66,12 @@ public class SupportTicketController {
 
     // Proveedor: devuelve stocks con tickets IN_PROGRESS
     @GetMapping("/provider/me")
-    public ResponseEntity<List<StockResponse>> listProviderInProgressTickets(Principal principal) {
-        return ResponseEntity.ok(supportTicketService.listProviderInProgressAsStocks(principal));
+    public ResponseEntity<Page<StockResponse>> listProviderInProgressTickets(
+            Principal principal,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        Page<StockResponse> result = supportTicketService.listProviderInProgressAsStocks(principal, pageable);
+        return ResponseEntity.ok(result);
     }
 
     // Cliente: devuelve stocks con tickets IN_PROCESS

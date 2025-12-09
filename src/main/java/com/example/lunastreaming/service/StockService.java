@@ -664,24 +664,19 @@ public class StockService {
     }
 
     @Transactional(readOnly = true)
-    public List<StockResponse> getProviderOnRequestPending(Principal principal) {
+    public Page<StockResponse> getProviderOnRequestPending(Principal principal, Pageable pageable) {
         UUID providerId = resolveUserIdFromPrincipal(principal);
         UserEntity provider = userRepository.findById(providerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
 
-        List<StockEntity> stocks = stockRepository
-                .findByProductProviderIdAndStatus(providerId, "requested");
+        Page<StockEntity> stocks = stockRepository.findByProductProviderIdAndStatus(providerId, "requested", pageable);
 
-        return stocks.stream()
-                .filter(s -> Boolean.TRUE.equals(s.getProduct().getIsOnRequest()))
-                .map(s -> {
-                    StockResponse resp = stockBuilder.toStockResponse(s);
-                    resp.setProviderName(provider.getUsername());
-                    resp.setProviderPhone(provider.getPhone());
-                    return resp;
-                })
-
-                .toList();
+        return stocks.map(s -> {
+            StockResponse resp = stockBuilder.toStockResponse(s);
+            resp.setProviderName(provider.getUsername());
+            resp.setProviderPhone(provider.getPhone());
+            return resp;
+        });
     }
 
     @Transactional(readOnly = true)
@@ -908,24 +903,22 @@ public class StockService {
     }
 
     @Transactional(readOnly = true)
-    public List<StockResponse> getProviderRenewedStocks(Principal principal) {
+    public Page<StockResponse> getProviderRenewedStocks(Principal principal, Pageable pageable) {
         UUID providerId = resolveUserIdFromPrincipal(principal);
 
         UserEntity provider = userRepository.findById(providerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
 
-        // 🚩 Buscar stocks del proveedor con estado RENEWED
-        List<StockEntity> stocks = stockRepository
-                .findByProductProviderIdAndStatus(providerId, "RENEWED");
+        // 🚩 Buscar stocks del proveedor con estado RENEWED, paginados
+        Page<StockEntity> stocks = stockRepository.findByProductProviderIdAndStatus(providerId, "RENEWED", pageable);
 
-        return stocks.stream()
-                .map(s -> {
-                    StockResponse resp = stockBuilder.toStockResponse(s);
-                    resp.setProviderName(provider.getUsername());
-                    resp.setProviderPhone(provider.getPhone());
-                    return resp;
-                })
-                .toList();
+        // mapear cada StockEntity -> StockResponse
+        return stocks.map(s -> {
+            StockResponse resp = stockBuilder.toStockResponse(s);
+            resp.setProviderName(provider.getUsername());
+            resp.setProviderPhone(provider.getPhone());
+            return resp;
+        });
     }
 
     @Transactional(readOnly = true)

@@ -1,6 +1,8 @@
 package com.example.lunastreaming.repository;
 
 import com.example.lunastreaming.model.SupportTicketEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -21,6 +23,6 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicketEnti
     List<SupportTicketEntity> findByClientIdAndStatusIn(UUID clientId, Collection<String> statuses);
     List<SupportTicketEntity> findByProviderIdAndStatusIn(UUID providerId, Collection<String> statuses);
 
-
+    Page<SupportTicketEntity> findByProviderIdAndStatus(UUID providerId, String status, Pageable pageable);
 
 }

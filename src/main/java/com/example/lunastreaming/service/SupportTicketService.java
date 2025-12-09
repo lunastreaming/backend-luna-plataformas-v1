@@ -6,6 +6,8 @@ import com.example.lunastreaming.repository.StockRepository;
 import com.example.lunastreaming.repository.SupportTicketRepository;
 import com.example.lunastreaming.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -146,14 +148,44 @@ public class SupportTicketService {
     }
 
     // Proveedor: devolver StockResponse para tickets IN_PROGRESS
-    public List<StockResponse> listProviderInProgressAsStocks(Principal principal) {
-        UUID providerId =  UUID.fromString(principal.getName());
+    @Transactional(readOnly = true)
+    public Page<StockResponse> listProviderInProgressAsStocks(Principal principal, Pageable pageable) {
+        UUID providerId = UUID.fromString(principal.getName());
 
-        // 1) obtener tickets IN_PROGRESS del provider
-        List<SupportTicketEntity> tickets = supportTicketRepository.findByProviderIdAndStatus(providerId, "OPEN");
-        if (tickets == null || tickets.isEmpty()) return Collections.emptyList();
+        // 1) obtener tickets paginados con status OPEN
+        Page<SupportTicketEntity> ticketsPage =
+                supportTicketRepository.findByProviderIdAndStatus(providerId, "OPEN", pageable);
 
-        return mapTicketsToStockResponses(tickets);
+        if (ticketsPage.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        // 2) reunir stockIds de todos los tickets de esta página
+        Set<Long> stockIds = ticketsPage.getContent().stream()
+                .map(t -> t.getStock() != null ? t.getStock().getId() : null)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<Long, StockEntity> stocksById = stockIds.isEmpty()
+                ? Collections.emptyMap()
+                : stockRepository.findAllById(stockIds).stream()
+                .collect(Collectors.toMap(StockEntity::getId, Function.identity()));
+
+        // 3) reunir providerIds para enrichment
+        Set<UUID> providerIds = stocksById.values().stream()
+                .map(StockEntity::getProduct)
+                .filter(Objects::nonNull)
+                .map(ProductEntity::getProviderId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<UUID, UserEntity> providersById = providerIds.isEmpty()
+                ? Collections.emptyMap()
+                : userRepository.findAllById(providerIds).stream()
+                .collect(Collectors.toMap(UserEntity::getId, Function.identity()));
+
+        // 4) mapear cada ticket -> StockResponse usando el método auxiliar
+        return ticketsPage.map(ticket -> mapTicketToStockResponse(ticket, stocksById, providersById));
     }
 
     // Helper común: mapea lista de tickets a lista de StockResponse enriquecidos
@@ -281,4 +313,48 @@ public class SupportTicketService {
         return toDTO(ticket);
     }
 
+
+    private StockResponse mapTicketToStockResponse(SupportTicketEntity ticket,
+                                                   Map<Long, StockEntity> stocksById,
+                                                   Map<UUID, UserEntity> providersById) {
+        StockEntity stock = ticket.getStock() != null ? stocksById.get(ticket.getStock().getId()) : null;
+
+        if (stock == null) {
+            return StockResponse.builder()
+                    .id(null)
+                    .productId(null)
+                    .productName(null)
+                    .supportId(ticket.getId())
+                    .supportType(ticket.getIssueType())
+                    .supportStatus(ticket.getStatus())
+                    .supportCreatedAt(ticket.getCreatedAt())
+                    .supportUpdatedAt(ticket.getUpdatedAt())
+                    .supportResolvedAt(ticket.getResolvedAt())
+                    .supportResolutionNote(ticket.getResolutionNote())
+                    .build();
+        }
+
+        StockResponse dto = stockBuilder.toStockResponse(stock);
+
+        ProductEntity prod = stock.getProduct();
+        if (prod != null && prod.getProviderId() != null) {
+            UserEntity prov = providersById.get(prod.getProviderId());
+            if (prov != null) {
+                dto.setProviderName(prov.getUsername());
+                dto.setProviderPhone(prov.getPhone());
+            }
+        }
+
+        dto.setSupportId(ticket.getId());
+        dto.setSupportType(ticket.getIssueType());
+        dto.setSupportStatus(ticket.getStatus());
+        dto.setSupportCreatedAt(ticket.getCreatedAt());
+        dto.setSupportUpdatedAt(ticket.getUpdatedAt());
+        dto.setSupportResolvedAt(ticket.getResolvedAt());
+        dto.setSupportResolutionNote(
+                stock.getResolutionNote() != null ? stock.getResolutionNote() : ticket.getResolutionNote()
+        );
+
+        return dto;
+    }
 }

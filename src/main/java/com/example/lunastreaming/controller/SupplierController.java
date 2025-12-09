@@ -61,10 +61,11 @@ public class SupplierController {
     }
 
     @GetMapping("/sales/provider/renewed")
-    public ResponseEntity<List<StockResponse>> getProviderRenewedStocks(
-            Principal principal
+    public ResponseEntity<Page<StockResponse>> getProviderRenewedStocks(
+            Principal principal,
+            @PageableDefault(size = 20) Pageable pageable
     ) {
-        List<StockResponse> result = stockService.getProviderRenewedStocks(principal);
+        Page<StockResponse> result = stockService.getProviderRenewedStocks(principal, pageable);
         return ResponseEntity.ok(result);
     }
 
