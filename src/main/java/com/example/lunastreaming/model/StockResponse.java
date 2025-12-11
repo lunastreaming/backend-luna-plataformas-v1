@@ -32,6 +32,7 @@ public class StockResponse {
     private Instant soldAt;
     private UUID buyerId;
     private String buyerUsername;
+    private String buyerUsernamePhone;
     private String clientName;
     private String clientPhone;
     private Boolean published;

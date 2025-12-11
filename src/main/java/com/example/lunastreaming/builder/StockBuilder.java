@@ -31,9 +31,11 @@ public class StockBuilder {
 
         UUID buyerId = null;
         String buyerUsername = null;
+        String buyerUsernamePhone = null;
         if (stockEntity.getBuyer() != null) {
             buyerId = stockEntity.getBuyer().getId();
             buyerUsername = stockEntity.getBuyer().getUsername();
+            buyerUsernamePhone = stockEntity.getBuyer().getPhone();
         }
 
         Instant soldAtInstant = null;
@@ -71,6 +73,7 @@ public class StockBuilder {
                 .soldAt(soldAtInstant)
                 .buyerId(buyerId)
                 .buyerUsername(buyerUsername)
+                .buyerUsernamePhone(buyerUsernamePhone)
                 .clientName(stockEntity.getClientName())
                 .clientPhone(stockEntity.getClientPhone())
                 .startAt(stockEntity.getStartAt())

@@ -163,6 +163,13 @@ public class SupportTicketService {
             dto.setSupportResolvedAt(ticket.getResolvedAt());
             dto.setSupportResolutionNote(ticket.getResolutionNote());
 
+            UUID providerId = ticket.getProviderId();
+            userRepository.findById(providerId).ifPresent(provider -> {
+                dto.setProviderName(provider.getUsername());
+                dto.setProviderPhone(provider.getPhone());
+            });
+
+
             return dto;
         });
     }
