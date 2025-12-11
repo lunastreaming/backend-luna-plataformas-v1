@@ -128,5 +128,7 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
             Pageable pageable
     );
 
+    Page<StockEntity> findByProductProviderId(UUID providerId, Pageable pageable);
+
 }
 

@@ -20,10 +20,13 @@ public class StockController {
 
     // GET /api/stock/me
     @GetMapping("/provider/me")
-    public ResponseEntity<List<StockResponse>> getMine(Principal principal) {
+    public ResponseEntity<Page<StockResponse>> getMine(
+            Principal principal,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
         String principalName = principal.getName();
-        // delega al servicio; implementa la resolución dentro del servicio según tu modelo
-        List<StockResponse> list = stockService.getByProviderPrincipal(principalName);
+        Page<StockResponse> list = stockService.getByProviderPrincipal(principalName, page, size);
         return ResponseEntity.ok(list);
     }
 

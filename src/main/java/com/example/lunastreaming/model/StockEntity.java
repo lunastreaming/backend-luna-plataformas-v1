@@ -59,11 +59,21 @@ public class StockEntity {
     @Column(name = "resolution_note")
     private String resolutionNote;
 
+    @Builder.Default
     @Column(name = "purchase_price", nullable = false, precision = 19, scale = 2)
     private BigDecimal purchasePrice = BigDecimal.ZERO;
 
     @Column(name = "renewed_at")
     private Instant renewedAt;
 
+    @Column(name = "created_at")
+    private Instant createdAt = Instant.now();
 
+    @PrePersist
+    @PreUpdate
+    public void prePersist() {
+        if (purchasePrice == null) {
+            purchasePrice = BigDecimal.ZERO;
+        }
+    }
 }

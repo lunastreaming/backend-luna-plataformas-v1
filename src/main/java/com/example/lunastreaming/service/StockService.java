@@ -44,21 +44,19 @@ public class StockService {
     private final SupportTicketRepository supportTicketRepository;
 
 
-    public List<StockResponse> getByProviderPrincipal(String principalName) {
-        // si principalName es UUID:
+    public Page<StockResponse> getByProviderPrincipal(String principalName, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+
         try {
             UUID providerId = UUID.fromString(principalName);
-            List<StockEntity> byProductProviderId = stockRepository.findByProductProviderId(providerId);// existing method that queries by product/provider id
-            return byProductProviderId.stream()
-                    .map(stockBuilder::toStockResponse).toList();
+            Page<StockEntity> byProductProviderId = stockRepository.findByProductProviderId(providerId, pageable);
+            return byProductProviderId.map(stockBuilder::toStockResponse);
         } catch (IllegalArgumentException ex) {
-            // si principalName es username -> resolver usuario y luego providerId
             UUID providerId = userRepository.findByUsername(principalName)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN))
                     .getId();
-            List<StockEntity> byProductProviderId = stockRepository.findByProductProviderId(providerId);// existing method that queries by product/provider id
-            return byProductProviderId.stream()
-                    .map(stockBuilder::toStockResponse).toList();
+            Page<StockEntity> byProductProviderId = stockRepository.findByProductProviderId(providerId, pageable);
+            return byProductProviderId.map(stockBuilder::toStockResponse);
         }
     }
 
