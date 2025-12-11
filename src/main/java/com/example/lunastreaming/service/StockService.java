@@ -956,4 +956,23 @@ public class StockService {
     }
 
 
+    @Transactional
+    public void confirmRefund(Long stockId, Principal principal) {
+        UUID clientId = resolveUserIdFromPrincipal(principal);
+
+        StockEntity stock = stockRepository.findById(stockId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Stock no encontrado"));
+
+        if (!stock.getBuyer().getId().equals(clientId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado para confirmar este reembolso");
+        }
+
+        if (!"REFUND".equalsIgnoreCase(stock.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El stock no está en estado de reembolso");
+        }
+
+        stock.setStatus("refund_confirmed");
+        stockRepository.save(stock);
+    }
+
 }

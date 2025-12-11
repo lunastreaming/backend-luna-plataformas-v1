@@ -169,4 +169,13 @@ public class StockController {
         return ResponseEntity.ok(result);
     }
 
+
+    @PatchMapping("/stocks/{stockId}/refund/confirm")
+    public ResponseEntity<Void> confirmRefund(
+            @PathVariable Long stockId,
+            Principal principal
+    ) {
+        stockService.confirmRefund(stockId, principal);
+        return ResponseEntity.noContent().build(); // 👈 devuelve 204 sin body
+    }
 }
