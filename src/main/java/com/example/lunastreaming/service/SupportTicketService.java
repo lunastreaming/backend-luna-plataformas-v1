@@ -137,14 +137,34 @@ public class SupportTicketService {
     }
 
     // Cliente: devolver StockResponse para tickets OPEN
-    public List<StockResponse> listClientOpenAsStocks(Principal principal) {
+    @Transactional(readOnly = true)
+    public Page<StockResponse> listClientOpenAsStocks(Principal principal, Pageable pageable) {
         UUID clientId = UUID.fromString(principal.getName());
 
-        // 1) obtener tickets OPEN del cliente
-        List<SupportTicketEntity> tickets = supportTicketRepository.findByClientIdAndStatus(clientId, "OPEN");
-        if (tickets == null || tickets.isEmpty()) return Collections.emptyList();
+        // 1) obtener tickets OPEN del cliente, paginados
+        Page<SupportTicketEntity> ticketsPage =
+                supportTicketRepository.findByClientIdAndStatus(clientId, "OPEN", pageable);
 
-        return mapTicketsToStockResponses(tickets);
+        if (ticketsPage.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        // 2) mapear cada ticket -> StockResponse
+        return ticketsPage.map(ticket -> {
+            // aquí puedes usar tu método auxiliar mapTicketToStockResponse
+            // o replicar la lógica de mapTicketsToStockResponses para un solo ticket
+            StockResponse dto = stockBuilder.toStockResponse(ticket.getStock());
+
+            dto.setSupportId(ticket.getId());
+            dto.setSupportType(ticket.getIssueType());
+            dto.setSupportStatus(ticket.getStatus());
+            dto.setSupportCreatedAt(ticket.getCreatedAt());
+            dto.setSupportUpdatedAt(ticket.getUpdatedAt());
+            dto.setSupportResolvedAt(ticket.getResolvedAt());
+            dto.setSupportResolutionNote(ticket.getResolutionNote());
+
+            return dto;
+        });
     }
 
     // Proveedor: devolver StockResponse para tickets IN_PROGRESS
@@ -275,14 +295,33 @@ public class SupportTicketService {
     }
 
 
-    public List<StockResponse> listClientInProcessAsStocks(Principal principal) {
+    @Transactional(readOnly = true)
+    public Page<StockResponse> listClientInProcessAsStocks(Principal principal, Pageable pageable) {
         UUID clientId = UUID.fromString(principal.getName());
 
-        // 1) obtener tickets IN_PROCESS del cliente
-        List<SupportTicketEntity> tickets = supportTicketRepository.findByClientIdAndStatus(clientId, "IN_PROGRESS");
-        if (tickets == null || tickets.isEmpty()) return Collections.emptyList();
+        // 1) obtener tickets IN_PROCESS del cliente, paginados
+        Page<SupportTicketEntity> ticketsPage =
+                supportTicketRepository.findByClientIdAndStatus(clientId, "IN_PROGRESS", pageable);
 
-        return mapTicketsToStockResponses(tickets);
+        if (ticketsPage.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        // 2) mapear cada ticket -> StockResponse
+        return ticketsPage.map(ticket -> {
+            StockEntity stock = ticket.getStock();
+            StockResponse dto = (stock != null) ? stockBuilder.toStockResponse(stock) : new StockResponse();
+
+            dto.setSupportId(ticket.getId());
+            dto.setSupportType(ticket.getIssueType());
+            dto.setSupportStatus(ticket.getStatus());
+            dto.setSupportCreatedAt(ticket.getCreatedAt());
+            dto.setSupportUpdatedAt(ticket.getUpdatedAt());
+            dto.setSupportResolvedAt(ticket.getResolvedAt());
+            dto.setSupportResolutionNote(ticket.getResolutionNote());
+
+            return dto;
+        });
     }
 
     @Transactional

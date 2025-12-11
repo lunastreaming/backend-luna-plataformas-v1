@@ -3,6 +3,7 @@ package com.example.lunastreaming.controller;
 import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.service.StockService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -143,14 +144,15 @@ public class StockController {
     }
 
     @GetMapping("/refunds")
-    public PagedResponse<StockResponse> listRefunds(
+    public ResponseEntity<Page<StockResponse>> listRefunds(
             Principal principal,
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String sort
     ) {
-        return stockService.listRefunds(principal, q, page, size, sort);
+        Page<StockResponse> result = stockService.listRefunds(principal, q, page, size, sort);
+        return ResponseEntity.ok(result);
     }
 
 

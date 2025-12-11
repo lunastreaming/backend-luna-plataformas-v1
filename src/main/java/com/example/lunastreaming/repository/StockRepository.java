@@ -121,5 +121,12 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     Page<StockEntity> findByBuyerIdAndStatusInAndIdNotIn(UUID buyerId, List<String> statuses, List<Long> excludedIds, Pageable pageable);
 
     Page<StockEntity> findByProductProviderIdAndStatus(UUID providerId, String status, Pageable pageable);
+
+    Page<StockEntity> findByBuyerIdAndStatusAndProductIsOnRequestTrue(
+            UUID buyerId,
+            String status,
+            Pageable pageable
+    );
+
 }
 

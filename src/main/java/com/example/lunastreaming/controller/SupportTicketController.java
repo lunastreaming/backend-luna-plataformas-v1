@@ -60,8 +60,12 @@ public class SupportTicketController {
 
     // Cliente: devuelve stocks con tickets OPEN
     @GetMapping("/client/me")
-    public ResponseEntity<List<StockResponse>> listClientOpenTickets(Principal principal) {
-        return ResponseEntity.ok(supportTicketService.listClientOpenAsStocks(principal));
+    public ResponseEntity<Page<StockResponse>> listClientOpenTickets(
+            Principal principal,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        Page<StockResponse> result = supportTicketService.listClientOpenAsStocks(principal, pageable);
+        return ResponseEntity.ok(result);
     }
 
     // Proveedor: devuelve stocks con tickets IN_PROGRESS
@@ -76,8 +80,12 @@ public class SupportTicketController {
 
     // Cliente: devuelve stocks con tickets IN_PROCESS
     @GetMapping("/client/in-process")
-    public ResponseEntity<List<StockResponse>> listClientInProcessTickets(Principal principal) {
-        return ResponseEntity.ok(supportTicketService.listClientInProcessAsStocks(principal));
+    public ResponseEntity<Page<StockResponse>> listClientInProcessTickets(
+            Principal principal,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        Page<StockResponse> result = supportTicketService.listClientInProcessAsStocks(principal, pageable);
+        return ResponseEntity.ok(result);
     }
 
     // Cliente: aprueba ticket (cambia de IN_PROCESS a RESOLVED)

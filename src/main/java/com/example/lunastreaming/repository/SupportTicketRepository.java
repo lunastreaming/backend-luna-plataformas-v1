@@ -16,7 +16,8 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicketEnti
     List<SupportTicketEntity> findByStockIdInAndStatusIn(Collection<Long> stockIds, Collection<String> statuses);
 
     // tickets por clientId / providerId y estado
-    List<SupportTicketEntity> findByClientIdAndStatus(UUID clientId, String status);
+    Page<SupportTicketEntity> findByClientIdAndStatus(UUID clientId, String status, Pageable pageable);
+
     List<SupportTicketEntity> findByProviderIdAndStatus(UUID providerId, String status);
 
     // si necesitas todos los tickets por clientId (varios estados)

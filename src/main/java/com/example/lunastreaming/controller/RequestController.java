@@ -22,10 +22,11 @@ public class RequestController {
     private final StockService stockService;
 
     @GetMapping("/support/client/in-process")
-    public ResponseEntity<List<StockResponse>> getClientOnRequestPending(
-            Principal principal
+    public ResponseEntity<Page<StockResponse>> getClientOnRequestPending(
+            Principal principal,
+            @PageableDefault(size = 50) Pageable pageable
     ) {
-        List<StockResponse> result = stockService.getClientOnRequestPending(principal);
+        Page<StockResponse> result = stockService.getClientOnRequestPending(principal, pageable);
         return ResponseEntity.ok(result);
     }
 

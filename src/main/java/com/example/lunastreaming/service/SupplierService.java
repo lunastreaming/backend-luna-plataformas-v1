@@ -39,9 +39,9 @@ public class SupplierService {
                     : raw;
         }
 
-        // 2. Calcular fee y neto
+        // 2. Calcular fee y total a descontar al proveedor
         BigDecimal fee = amount.multiply(discountFraction);
-        BigDecimal netAmount = amount.subtract(fee);
+        BigDecimal totalToDebit = amount.add(fee); // proveedor paga más
 
         // 3. Buscar usuarios
         UserEntity supplier = userRepository.findById(supplierId)
@@ -50,8 +50,8 @@ public class SupplierService {
                 .orElseThrow(() -> new RuntimeException("Vendedor no encontrado"));
 
         // 4. Actualizar balances
-        supplier.setBalance(supplier.getBalance().subtract(amount));
-        seller.setBalance(seller.getBalance().add(netAmount));
+        supplier.setBalance(supplier.getBalance().subtract(totalToDebit));
+        seller.setBalance(seller.getBalance().add(amount));
 
         userRepository.save(supplier);
         userRepository.save(seller);
@@ -62,24 +62,24 @@ public class SupplierService {
         WalletTransaction txDebit = WalletTransaction.builder()
                 .user(supplier)
                 .type("transfer")
-                .amount(amount.negate()) // proveedor paga el monto completo
+                .amount(totalToDebit.negate()) // proveedor paga monto + fee
                 .currency("PEN")
                 .status("approved")
                 .createdAt(now)
-                .description("Transferencia al vendedor " + seller.getUsername())
-                .realAmount(amount.negate())
+                .description("Transferencia al vendedor " + seller.getUsername() + " (incluye fee)")
+                .realAmount(totalToDebit.negate())
                 .exchangeApplied(false)
                 .build();
 
         WalletTransaction txCredit = WalletTransaction.builder()
                 .user(seller)
                 .type("transfer")
-                .amount(netAmount) // vendedor recibe neto
+                .amount(amount) // vendedor recibe monto completo
                 .currency("PEN")
                 .status("approved")
                 .createdAt(now)
                 .description("Transferencia recibida del proveedor " + supplier.getUsername())
-                .realAmount(netAmount)
+                .realAmount(amount)
                 .exchangeApplied(false)
                 .build();
 

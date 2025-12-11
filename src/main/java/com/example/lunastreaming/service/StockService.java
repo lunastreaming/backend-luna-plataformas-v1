@@ -639,29 +639,31 @@ public class StockService {
     }
 
     @Transactional(readOnly = true)
-    public List<StockResponse> getClientOnRequestPending(Principal principal) {
+    public Page<StockResponse> getClientOnRequestPending(Principal principal, Pageable pageable) {
         UUID buyerId = resolveUserIdFromPrincipal(principal);
 
-        List<StockEntity> stocks = stockRepository
-                .findByBuyerIdAndStatus(buyerId, "requested");
+        // 1) obtener stocks del cliente con estado "requested" y product.isOnRequest = true
+        Page<StockEntity> stocksPage =
+                stockRepository.findByBuyerIdAndStatusAndProductIsOnRequestTrue(buyerId, "requested", pageable);
 
-        return stocks.stream()
-                .filter(s -> Boolean.TRUE.equals(s.getProduct().getIsOnRequest()))
-                .map(s -> {
-                    // Construyes la respuesta base
-                    StockResponse resp = stockBuilder.toStockResponse(s);
+        if (stocksPage.isEmpty()) {
+            return Page.empty(pageable);
+        }
 
-                    // Resuelves el proveedor a partir del product.providerId
-                    UUID providerId = s.getProduct().getProviderId();
-                    userRepository.findById(providerId).ifPresent(provider -> {
-                        resp.setProviderName(provider.getUsername());
-                        resp.setProviderPhone(provider.getPhone());
-                    });
+        // 2) mapear cada stock -> StockResponse
+        return stocksPage.map(s -> {
+            StockResponse resp = stockBuilder.toStockResponse(s);
 
-                    return resp;
-                })
-                .toList();
+            UUID providerId = s.getProduct().getProviderId();
+            userRepository.findById(providerId).ifPresent(provider -> {
+                resp.setProviderName(provider.getUsername());
+                resp.setProviderPhone(provider.getPhone());
+            });
+
+            return resp;
+        });
     }
+
 
     @Transactional(readOnly = true)
     public Page<StockResponse> getProviderOnRequestPending(Principal principal, Pageable pageable) {
@@ -680,7 +682,7 @@ public class StockService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<StockResponse> listRefunds(
+    public Page<StockResponse> listRefunds(
             Principal principal,
             String q,
             int page,
@@ -738,7 +740,7 @@ public class StockService {
                 ));
 
         // 5) mapear cada stock a StockResponse y enriquecer
-        Page<StockResponse> mapped = p.map(stock -> {
+        return p.map(stock -> {
             StockResponse dto = stockBuilder.toStockResponse(stock);
 
             // provider enrichment
@@ -767,8 +769,6 @@ public class StockService {
 
             return dto;
         });
-
-        return toPagedResponse(mapped);
     }
 
     @Transactional

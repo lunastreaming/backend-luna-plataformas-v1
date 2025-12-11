@@ -355,6 +355,7 @@ public class RefundService {
                 .createdAt(now)
                 .description("Reembolso por stock id " + stockId)
                 .realAmount(refund)
+                .exchangeApplied(false)
                 .build();
 
         WalletTransaction txDebit = WalletTransaction.builder()
@@ -366,6 +367,7 @@ public class RefundService {
                 .createdAt(now)
                 .description("Descuento por reembolso stock id " + stockId)
                 .realAmount(refund.negate())
+                .exchangeApplied(false)
                 .build();
 
         WalletTransaction savedCredit = walletTransactionRepository.save(txCredit);
