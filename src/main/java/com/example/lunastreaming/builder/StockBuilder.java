@@ -8,6 +8,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
@@ -48,7 +50,7 @@ public class StockBuilder {
         if (stockEntity.getEndAt() != null) {
             BigDecimal productPrice = stockEntity.getPurchasePrice() != null ? stockEntity.getPurchasePrice() : null;
             Integer productDays = stockEntity.getProduct() != null ? stockEntity.getProduct().getDays() : null;
-            refund = computeRefund(productPrice, productPrice, productDays, stockEntity.getEndAt(), BigDecimal.ZERO);
+            refund = computeRefund(productPrice, productPrice, productDays, stockEntity.getEndAt(), BigDecimal.ZERO, stockEntity.getStartAt());
         }
 
         // calcular daysRemaining y daysPublished
@@ -116,18 +118,38 @@ public class StockBuilder {
     private static final long SECONDS_PER_DAY = 86_400L;
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
-    public BigDecimal computeRefund(final BigDecimal paidAmount, final BigDecimal productPrice, final Integer productDays, final Instant endAt, final BigDecimal feePercent) {
+    public BigDecimal computeRefund(
+            final BigDecimal paidAmount,
+            final BigDecimal productPrice,
+            final Integer productDays,
+            final Instant endAt,
+            final BigDecimal feePercent,
+            final Instant startAt // 👈 necesitas también la fecha de inicio
+    ) {
         BigDecimal price = paidAmount != null ? paidAmount : productPrice;
         if (price == null || productDays == null || productDays <= 0 || endAt == null) return ZERO;
+
+        // 👇 lógica adicional: si la compra fue hoy y la consulta es hoy
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate startDate = startAt != null ? startAt.atZone(ZoneOffset.UTC).toLocalDate() : null;
+        if (startDate != null && startDate.equals(today)) {
+            // devolver el precio completo
+            return price.setScale(2, RoundingMode.HALF_UP);
+        }
 
         long secondsRemaining = ChronoUnit.SECONDS.between(Instant.now(), endAt);
         if (secondsRemaining <= 0) return ZERO;
 
-        BigDecimal daysRemaining = BigDecimal.valueOf(secondsRemaining).divide(BigDecimal.valueOf(SECONDS_PER_DAY), 8, RoundingMode.HALF_UP);
-        BigDecimal refund = price.multiply(daysRemaining).divide(BigDecimal.valueOf(productDays), 8, RoundingMode.HALF_UP);
+        BigDecimal daysRemaining = BigDecimal.valueOf(secondsRemaining)
+                .divide(BigDecimal.valueOf(SECONDS_PER_DAY), 8, RoundingMode.HALF_UP);
+
+        BigDecimal refund = price.multiply(daysRemaining)
+                .divide(BigDecimal.valueOf(productDays), 8, RoundingMode.HALF_UP);
+
         if (feePercent != null && feePercent.compareTo(BigDecimal.ZERO) > 0) {
             refund = refund.multiply(BigDecimal.ONE.subtract(feePercent));
         }
+
         return refund.setScale(2, RoundingMode.HALF_UP);
     }
 

@@ -16,6 +16,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.security.Principal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -44,7 +46,7 @@ public class RefundService {
         StockEntity stock = stockRepository.findById(stockId)
                 .orElseThrow(() -> new IllegalArgumentException("stock_not_found"));
 
-        // 3) obtener buyer desde stock o validar buyerId si fue provisto
+        // 3) obtener buyer
         UserEntity buyer = stock.getBuyer();
         if (buyer == null && buyerId == null) {
             throw new IllegalArgumentException("buyer_not_found");
@@ -59,7 +61,7 @@ public class RefundService {
             }
         }
 
-        // 4) obtener provider desde product -> providerId -> UserEntity
+        // 4) obtener provider desde product
         ProductEntity product = stock.getProduct();
         if (product == null) {
             throw new IllegalStateException("product_not_found_on_stock");
@@ -68,26 +70,39 @@ public class RefundService {
         UserEntity provider = userRepository.findById(providerId)
                 .orElseThrow(() -> new IllegalArgumentException("provider_not_found"));
 
-        // 5) calcular refund usando la lógica existente
+        // 5) calcular refund con lógica adicional
         BigDecimal refund = ZERO;
-        if (stock.getEndAt() != null) {
-            BigDecimal productPrice = stock.getPurchasePrice();
-            Integer productDays = product.getDays();
-            refund = computeRefund(productPrice, productPrice, productDays, stock.getEndAt(), ZERO);
+        BigDecimal productPrice = stock.getPurchasePrice();
+        Integer productDays = product.getDays();
+
+        if (productPrice == null || productPrice.compareTo(ZERO) <= 0) {
+            throw new IllegalStateException("invalid_product_price");
+        }
+
+        if (stock.getStartAt() != null && stock.getEndAt() != null) {
+            LocalDate today = LocalDate.now(ZoneOffset.UTC);
+            LocalDate startDate = stock.getStartAt().atZone(ZoneOffset.UTC).toLocalDate();
+
+            if (startDate.equals(today)) {
+                // 👇 compra y ejecución el mismo día → refund = precio completo
+                refund = productPrice.setScale(2, RoundingMode.HALF_UP);
+            } else {
+                // 👇 cálculo proporcional normal
+                refund = computeRefund(productPrice, productPrice, productDays, stock.getEndAt(), ZERO);
+            }
         }
 
         if (refund == null || refund.compareTo(ZERO) <= 0) {
             throw new IllegalStateException("refund_amount_zero");
         }
 
-        // normalizar escala y rounding
         refund = refund.setScale(2, RoundingMode.HALF_UP);
 
-        // 6) marcar stock como REFUND (o REFUND_PENDING según tu flujo)
+        // 6) marcar stock como REFUND
         stock.setStatus("REFUND");
         stockRepository.save(stock);
 
-        // 7) crear transacciones wallet: crédito al buyer y débito al provider (persistir primero)
+        // 7) crear transacciones wallet
         Instant now = Instant.now();
 
         WalletTransaction txCredit = WalletTransaction.builder()
@@ -119,22 +134,16 @@ public class RefundService {
         WalletTransaction savedCredit = walletTransactionRepository.save(txCredit);
         WalletTransaction savedDebit = walletTransactionRepository.save(txDebit);
 
-        // 8) actualizar balances en UserEntity con locking para concurrencia
-        // Buyer: balance += refund
+        // 8) actualizar balances con locking
         UserEntity buyerLocked = userRepository.findByIdForUpdate(buyer.getId())
                 .orElseThrow(() -> new IllegalStateException("buyer_not_found_for_update"));
         BigDecimal newBuyerBalance = safeAdd(buyerLocked.getBalance(), refund);
         buyerLocked.setBalance(newBuyerBalance.setScale(2, RoundingMode.HALF_UP));
         userRepository.save(buyerLocked);
 
-        // Provider: balance -= refund (valida si permites saldo negativo)
         UserEntity providerLocked = userRepository.findByIdForUpdate(provider.getId())
                 .orElseThrow(() -> new IllegalStateException("provider_not_found_for_update"));
         BigDecimal newProviderBalance = safeSubtract(providerLocked.getBalance(), refund);
-
-        // Si no permites saldo negativo, valida aquí:
-        // if (newProviderBalance.compareTo(BigDecimal.ZERO) < 0) throw new IllegalStateException("provider_insufficient_balance");
-
         providerLocked.setBalance(newProviderBalance.setScale(2, RoundingMode.HALF_UP));
         userRepository.save(providerLocked);
 
@@ -309,7 +318,7 @@ public class RefundService {
             throw new IllegalStateException("actor_not_provider_of_stock");
         }
 
-        // 3) obtener buyer (igual que admin)
+        // 3) obtener buyer
         UserEntity buyer = stock.getBuyer();
         if (buyer == null && buyerId == null) {
             throw new IllegalArgumentException("buyer_not_found");
@@ -324,17 +333,32 @@ public class RefundService {
             }
         }
 
-        // 4) obtener provider desde principal
+        // 4) obtener provider
         UserEntity provider = userRepository.findById(providerIdFromPrincipal)
                 .orElseThrow(() -> new IllegalArgumentException("provider_not_found"));
 
-        // 5) calcular refund (misma lógica que admin)
+        // 5) calcular refund con lógica adicional
         BigDecimal refund = ZERO;
-        if (stock.getEndAt() != null) {
-            BigDecimal productPrice = stock.getPurchasePrice();
-            Integer productDays = stock.getProduct().getDays();
-            refund = computeRefund(productPrice, productPrice, productDays, stock.getEndAt(), ZERO);
+        BigDecimal productPrice = stock.getPurchasePrice();
+        Integer productDays = stock.getProduct().getDays();
+
+        if (productPrice == null || productPrice.compareTo(ZERO) <= 0) {
+            throw new IllegalStateException("invalid_product_price");
         }
+
+        if (stock.getStartAt() != null && stock.getEndAt() != null) {
+            LocalDate today = LocalDate.now(ZoneOffset.UTC);
+            LocalDate startDate = stock.getStartAt().atZone(ZoneOffset.UTC).toLocalDate();
+
+            if (startDate.equals(today)) {
+                // 👇 compra y ejecución el mismo día → refund = precio completo
+                refund = productPrice.setScale(2, RoundingMode.HALF_UP);
+            } else {
+                // 👇 cálculo proporcional normal
+                refund = computeRefund(productPrice, productPrice, productDays, stock.getEndAt(), ZERO);
+            }
+        }
+
         if (refund == null || refund.compareTo(ZERO) <= 0) {
             throw new IllegalStateException("refund_amount_zero");
         }
@@ -344,7 +368,7 @@ public class RefundService {
         stock.setStatus("REFUND");
         stockRepository.save(stock);
 
-        // 7) transacciones wallet (igual que admin)
+        // 7) transacciones wallet
         Instant now = Instant.now();
         WalletTransaction txCredit = WalletTransaction.builder()
                 .user(buyer)
