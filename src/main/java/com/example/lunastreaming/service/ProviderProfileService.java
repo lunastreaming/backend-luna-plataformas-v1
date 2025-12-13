@@ -25,14 +25,17 @@ public class ProviderProfileService {
 
         // Validar que el que ejecuta sea admin
         if (!"admin".equalsIgnoreCase(userAdmin.getRole())) {
-            throw new RuntimeException("Only admin can enable transfer");
+            throw new RuntimeException("Only admin can toggle transfer");
         }
 
         ProviderProfileEntity profile = providerProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Provider profile not found"));
 
-        profile.setCanTransfer(true);
+        // Toggle: si está en true lo pone en false, si está en false lo pone en true
+        profile.setCanTransfer(!Boolean.TRUE.equals(profile.getCanTransfer()));
+
         return providerProfileRepository.save(profile);
+
     }
 
 }
