@@ -3,6 +3,7 @@ package com.example.lunastreaming.controller;
 import com.example.lunastreaming.model.RefundRequest;
 import com.example.lunastreaming.model.StockResponse;
 import com.example.lunastreaming.model.TransferRequest;
+import com.example.lunastreaming.service.ProviderProfileService;
 import com.example.lunastreaming.service.RefundService;
 import com.example.lunastreaming.service.StockService;
 import com.example.lunastreaming.service.SupplierService;
@@ -15,7 +16,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.security.Principal;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -27,6 +27,7 @@ public class SupplierController {
     private final RefundService refundService;
     private final StockService stockService;
     private final SupplierService supplierService;
+    private final ProviderProfileService providerProfileService;
 
     @PostMapping("/provider/stocks/{stockId}/refund")
     public ResponseEntity<Map<String, Object>> refundStockAsProvider(
@@ -111,6 +112,12 @@ public class SupplierController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/toggle-status")
+    public ResponseEntity<String> toggleStatus(Principal id) {
+        return providerProfileService.toggleStatus(UUID.fromString(id.getName()))
+                .map(provider -> ResponseEntity.ok("Estado actualizado a: " + provider.getStatus()))
+                .orElse(ResponseEntity.notFound().build());
+    }
 
 }
 

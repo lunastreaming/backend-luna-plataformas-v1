@@ -24,6 +24,10 @@ public class ProviderProfileEntity {
     @Column(name = "can_transfer", nullable = false)
     private Boolean canTransfer = false;
 
+    @Column(name = "status", nullable = false)
+    private String status = "inactive"; // valores: "active" o "inactive"
+
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private UserEntity user;

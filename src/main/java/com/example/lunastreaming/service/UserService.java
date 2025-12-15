@@ -243,8 +243,11 @@ public class UserService {
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
         Boolean canTransfer = false;
+        String providerStatus = null;
         if (Objects.equals(user.getRole(), "provider")) {
             canTransfer = user.getProviderProfile().getCanTransfer();
+            providerStatus = user.getProviderProfile().getStatus();
+
         }
 
         return UserSummary.builder()
@@ -257,6 +260,7 @@ public class UserService {
                 .status(user.getStatus())
                 .referralsCount(user.getReferralsCount())
                 .canTransfer(canTransfer)
+                .providerStatus(providerStatus)
                 .build();
     }
 

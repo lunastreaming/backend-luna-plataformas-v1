@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.Principal;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -37,5 +38,22 @@ public class ProviderProfileService {
         return providerProfileRepository.save(profile);
 
     }
+
+    public Optional<ProviderProfileEntity> toggleStatus(UUID userId) {
+        return userRepository.findById(userId)
+                .map(user -> {
+                    ProviderProfileEntity provider = user.getProviderProfile();
+                    if (provider == null) {
+                        throw new IllegalStateException("El usuario no tiene perfil de proveedor");
+                    }
+                    if ("active".equalsIgnoreCase(provider.getStatus())) {
+                        provider.setStatus("inactive");
+                    } else {
+                        provider.setStatus("active");
+                    }
+                    return providerProfileRepository.save(provider);
+                });
+    }
+
 
 }
