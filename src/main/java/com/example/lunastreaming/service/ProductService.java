@@ -83,7 +83,7 @@ public class ProductService {
                     product.setDaysRemaining(DaysUtil.daysRemainingFromTimestamp(product.getPublishEnd(), zone));
                     return ProductResponse
                             .builder()
-                            .product(productBuilder.productDtoFromEntity(product, null, null))
+                            .product(productBuilder.productDtoFromEntity(product, null, null, null))
                             .stockResponses(stockResponses)
                             .build();
                 })
@@ -134,7 +134,7 @@ public class ProductService {
         // 4) Construir y retornar ProductResponse
         return ProductResponse
                 .builder()
-                .product(productBuilder.productDtoFromEntity(product, null, null))
+                .product(productBuilder.productDtoFromEntity(product, null, null, null))
                 .stockResponses(stockResponses)
                 .build();
     }
@@ -405,7 +405,7 @@ public class ProductService {
                     UserEntity provider = entity.getProviderId() == null ? null : providersById.get(entity.getProviderId());
                     String providerName = resolveProviderDisplayName(provider);
 
-                    ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName);
+                    ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName, provider);
 
                     List<StockEntity> stockForProduct = stocksByProduct.getOrDefault(entity.getId(), Collections.emptyList());
                     long stockCount = stockForProduct.size();
@@ -505,7 +505,7 @@ public class ProductService {
                     UserEntity provider = entity.getProviderId() == null ? null : providersById.get(entity.getProviderId());
                     String providerName = resolveProviderDisplayName(provider);
 
-                    ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName);
+                    ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName, provider);
 
                     long stockCount = stockCountByProduct.getOrDefault(entity.getId(), 0L);
 

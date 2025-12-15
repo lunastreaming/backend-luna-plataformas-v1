@@ -22,6 +22,8 @@ public class ProductDto {
 
     private String providerName;
 
+    private String providerStatus;
+
     private Integer categoryId;
 
     private String categoryName;
