@@ -304,7 +304,7 @@ public class StockService {
                 .status("approved")
                 .createdAt(Instant.now())
                 .approvedAt(Instant.now())
-                .description("Compra de stock del producto: " + product.getName())
+                .description("COMPRA: " + product.getName() + stock.getId())
                 .exchangeApplied(false)
                 .build());
 
@@ -323,7 +323,7 @@ public class StockService {
                 .status("approved")
                 .createdAt(Instant.now())
                 .approvedAt(Instant.now())
-                .description("Venta de stock del producto: " + product.getName())
+                .description("VENTA: " + product.getName()  + " ID " + stock.getId())
                 .exchangeApplied(false)
                 .build());
 
@@ -505,10 +505,8 @@ public class StockService {
      */
     @Transactional(readOnly = true)
     public PagedResponse<StockResponse> listAllSoldStocks(Principal principal, String q, int page, int size, String sort) {
-        // 1) validar actor admin (tu implementación)
         validateActorIsAdmin(principal);
 
-        // 2) normalizar page/size y crear Pageable (usa tu RequestUtil si prefieres)
         int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
         int safePage = Math.max(0, page);
 
@@ -523,10 +521,10 @@ public class StockService {
         }
         Pageable pageable = PageRequest.of(safePage, safeSize, sortObj);
 
-        // 3) consultar stocks con status = "sold"
-        Page<StockEntity> pageResult = stockRepository.findByStatus("sold", pageable);
+        // 👇 ahora buscamos múltiples estados
+        List<String> statuses = List.of("sold", "REFUND", "refund_confirmed", "requested");
+        Page<StockEntity> pageResult = stockRepository.findByStatusIn(statuses, pageable);
 
-        // 4) recolectar providerIds desde product.providerId (evitar nulls)
         List<UUID> providerIds = pageResult.stream()
                 .map(StockEntity::getProduct)
                 .filter(Objects::nonNull)
@@ -535,7 +533,6 @@ public class StockService {
                 .distinct()
                 .collect(Collectors.toList());
 
-        // 5) construir providerMap UNA VEZ y no reasignarlo (final)
         final Map<UUID, UserEntity> providerMap;
         if (providerIds.isEmpty()) {
             providerMap = Collections.emptyMap();
@@ -544,11 +541,9 @@ public class StockService {
             providerMap = providers.stream().collect(Collectors.toMap(UserEntity::getId, Function.identity()));
         }
 
-        // 6) mapear a StockResponse y enriquecer con providerName/providerPhone
         List<StockResponse> content = pageResult.stream()
                 .map(stock -> {
                     StockResponse resp = stockBuilder.toStockResponse(stock);
-
                     ProductEntity prod = stock.getProduct();
                     if (prod != null && prod.getProviderId() != null) {
                         UserEntity provider = providerMap.get(prod.getProviderId());
@@ -557,14 +552,11 @@ public class StockService {
                             resp.setProviderPhone(provider.getPhone());
                         }
                     }
-
                     return resp;
                 })
                 .collect(Collectors.toList());
 
         Page<StockResponse> mappedPage = new PageImpl<>(content, pageable, pageResult.getTotalElements());
-
-        // 7) convertir a PagedResponse (usa tu util real)
         return toPagedResponse(mappedPage);
     }
 

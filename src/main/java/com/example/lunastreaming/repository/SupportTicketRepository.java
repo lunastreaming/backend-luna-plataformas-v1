@@ -26,4 +26,7 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicketEnti
 
     Page<SupportTicketEntity> findByProviderIdAndStatus(UUID providerId, String status, Pageable pageable);
 
+
+    List<SupportTicketEntity> findByStockId(Long stockId);
+
 }

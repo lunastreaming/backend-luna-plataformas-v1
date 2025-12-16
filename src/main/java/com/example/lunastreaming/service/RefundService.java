@@ -1,10 +1,8 @@
 package com.example.lunastreaming.service;
 
-import com.example.lunastreaming.model.ProductEntity;
-import com.example.lunastreaming.model.StockEntity;
-import com.example.lunastreaming.model.UserEntity;
-import com.example.lunastreaming.model.WalletTransaction;
+import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.repository.StockRepository;
+import com.example.lunastreaming.repository.SupportTicketRepository;
 import com.example.lunastreaming.repository.UserRepository;
 import com.example.lunastreaming.repository.WalletTransactionRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,10 +16,7 @@ import java.security.Principal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 import static java.math.BigDecimal.ZERO;
 
@@ -32,6 +27,7 @@ public class RefundService {
     private final StockRepository stockRepository;
     private final UserRepository userRepository;
     private final WalletTransactionRepository walletTransactionRepository;
+    private final SupportTicketRepository supportTicketRepository;
 
     /**
      * Realiza reembolso para un stock. Solo admin puede ejecutar.
@@ -45,6 +41,10 @@ public class RefundService {
         // 2) cargar stock
         StockEntity stock = stockRepository.findById(stockId)
                 .orElseThrow(() -> new IllegalArgumentException("stock_not_found"));
+
+        if ("REFUND".equalsIgnoreCase(stock.getStatus())) {
+            throw new IllegalStateException("stock_already_refunded");
+        }
 
         // 3) obtener buyer
         UserEntity buyer = stock.getBuyer();
@@ -102,8 +102,20 @@ public class RefundService {
         stock.setStatus("REFUND");
         stockRepository.save(stock);
 
-        // 7) crear transacciones wallet
+        // 6b) cerrar tickets asociados
+        List<SupportTicketEntity> tickets = supportTicketRepository.findByStockId(stockId);
         Instant now = Instant.now();
+        for (SupportTicketEntity ticket : tickets) {
+            if (!"RESOLVED".equalsIgnoreCase(ticket.getStatus())) {
+                ticket.setStatus("RESOLVED");
+                ticket.setResolvedAt(now);
+                ticket.setResolutionNote("Cerrado automáticamente por reembolso del stock " + stockId);
+                supportTicketRepository.save(ticket);
+            }
+        }
+
+
+        // 7) crear transacciones wallet
 
         WalletTransaction txCredit = WalletTransaction.builder()
                 .user(buyer)
@@ -114,7 +126,7 @@ public class RefundService {
                 .exchangeRate(null)
                 .status("approved")
                 .createdAt(now)
-                .description("Reembolso por stock id " + stockId)
+                .description("REEMBOLSO " + stock.getProduct().getName() + " ID " + stockId)
                 .realAmount(refund)
                 .build();
 
@@ -127,7 +139,7 @@ public class RefundService {
                 .exchangeRate(null)
                 .status("approved")
                 .createdAt(now)
-                .description("Descuento por reembolso stock id " + stockId)
+                .description("REEMBOLSO " + stock.getProduct().getName() + " ID " + stockId)
                 .realAmount(refund.negate())
                 .build();
 
@@ -211,6 +223,10 @@ public class RefundService {
         StockEntity stock = stockRepository.findById(stockId)
                 .orElseThrow(() -> new IllegalArgumentException("stock_not_found"));
 
+        if ("REFUND".equalsIgnoreCase(stock.getStatus())) {
+            throw new IllegalStateException("stock_already_refunded");
+        }
+
         // 3) resolver buyer (igual que en el flujo parcial)
         UserEntity buyer = stock.getBuyer();
         if (buyer == null && buyerId == null) {
@@ -246,8 +262,20 @@ public class RefundService {
         stock.setStatus("REFUND");
         stockRepository.save(stock);
 
-        // 7) crear transacciones wallet: crédito al buyer y débito al provider
+        // 6b) cerrar tickets asociados
+        List<SupportTicketEntity> tickets = supportTicketRepository.findByStockId(stockId);
         Instant now = Instant.now();
+        for (SupportTicketEntity ticket : tickets) {
+            if (!"RESOLVED".equalsIgnoreCase(ticket.getStatus())) {
+                ticket.setStatus("RESOLVED");
+                ticket.setResolvedAt(now);
+                ticket.setResolutionNote("Cerrado automáticamente por reembolso del stock " + stockId);
+                supportTicketRepository.save(ticket);
+            }
+        }
+
+
+        // 7) crear transacciones wallet: crédito al buyer y débito al provider
 
         WalletTransaction txCredit = WalletTransaction.builder()
                 .user(buyer)
@@ -258,7 +286,7 @@ public class RefundService {
                 .exchangeRate(null)
                 .status("approved")
                 .createdAt(now)
-                .description("Reembolso completo por stock id " + stockId)
+                .description("REEMBOLSO " + stock.getProduct().getName() + " ID " + stockId)
                 .realAmount(refund)
                 .build();
 
@@ -271,7 +299,7 @@ public class RefundService {
                 .exchangeRate(null)
                 .status("approved")
                 .createdAt(now)
-                .description("Descuento por reembolso completo stock id " + stockId)
+                .description("REEMBOLSO " + stock.getProduct().getName() + " ID " + stockId)
                 .realAmount(refund.negate())
                 .build();
 
@@ -311,6 +339,10 @@ public class RefundService {
         // 1) cargar stock
         StockEntity stock = stockRepository.findById(stockId)
                 .orElseThrow(() -> new IllegalArgumentException("stock_not_found"));
+
+        if ("REFUND".equalsIgnoreCase(stock.getStatus())) {
+            throw new IllegalStateException("stock_already_refunded");
+        }
 
         // 2) validar que el actor es el proveedor del producto
         UUID providerIdFromPrincipal = resolveUserIdFromPrincipal(principal);
@@ -368,8 +400,18 @@ public class RefundService {
         stock.setStatus("REFUND");
         stockRepository.save(stock);
 
-        // 7) transacciones wallet
+        List<SupportTicketEntity> tickets = supportTicketRepository.findByStockId(stockId);
         Instant now = Instant.now();
+        for (SupportTicketEntity ticket : tickets) {
+            if (!"RESOLVED".equalsIgnoreCase(ticket.getStatus())) {
+                ticket.setStatus("RESOLVED");
+                ticket.setResolvedAt(now);
+                ticket.setResolutionNote("Cerrado automáticamente por reembolso del stock " + stockId);
+                supportTicketRepository.save(ticket);
+            }
+        }
+
+        // 7) transacciones wallet
         WalletTransaction txCredit = WalletTransaction.builder()
                 .user(buyer)
                 .type("refund")
@@ -377,7 +419,7 @@ public class RefundService {
                 .currency("PEN")
                 .status("approved")
                 .createdAt(now)
-                .description("Reembolso por stock id " + stockId)
+                .description("REEMBOLSO " + stock.getProduct().getName() + " ID " + stockId)
                 .realAmount(refund)
                 .exchangeApplied(false)
                 .build();
@@ -389,7 +431,7 @@ public class RefundService {
                 .currency("PEN")
                 .status("approved")
                 .createdAt(now)
-                .description("Descuento por reembolso stock id " + stockId)
+                .description("REEMBOLSO " + stock.getProduct().getName() + " ID " + stockId)
                 .realAmount(refund.negate())
                 .exchangeApplied(false)
                 .build();
@@ -425,6 +467,10 @@ public class RefundService {
         // 1) cargar stock
         StockEntity stock = stockRepository.findById(stockId)
                 .orElseThrow(() -> new IllegalArgumentException("stock_not_found"));
+
+        if ("REFUND".equalsIgnoreCase(stock.getStatus())) {
+            throw new IllegalStateException("stock_already_refunded");
+        }
 
         // 2) validar que el actor es el proveedor del producto
         UUID providerIdFromPrincipal = resolveUserIdFromPrincipal(principal);
@@ -466,8 +512,19 @@ public class RefundService {
         stock.setStatus("REFUND");
         stockRepository.save(stock);
 
-        // 7) crear transacciones wallet: crédito al buyer y débito al provider
+        // 6b) cerrar tickets asociados
+        List<SupportTicketEntity> tickets = supportTicketRepository.findByStockId(stockId);
         Instant now = Instant.now();
+        for (SupportTicketEntity ticket : tickets) {
+            if (!"RESOLVED".equalsIgnoreCase(ticket.getStatus())) {
+                ticket.setStatus("RESOLVED");
+                ticket.setResolvedAt(now);
+                ticket.setResolutionNote("Cerrado automáticamente por reembolso del stock " + stockId);
+                supportTicketRepository.save(ticket);
+            }
+        }
+
+        // 7) crear transacciones wallet: crédito al buyer y débito al provider
 
         WalletTransaction txCredit = WalletTransaction.builder()
                 .user(buyer)
@@ -478,7 +535,7 @@ public class RefundService {
                 .exchangeRate(null)
                 .status("approved")
                 .createdAt(now)
-                .description("Reembolso completo por stock id " + stockId)
+                .description("REEMBOLSO " + stock.getProduct().getName() + " ID " + stockId)
                 .realAmount(refund)
                 .build();
 
@@ -491,7 +548,7 @@ public class RefundService {
                 .exchangeRate(null)
                 .status("approved")
                 .createdAt(now)
-                .description("Descuento por reembolso completo stock id " + stockId)
+                .description("REEMBOLSO " + stock.getProduct().getName() + " ID " + stockId)
                 .realAmount(refund.negate())
                 .build();
 
