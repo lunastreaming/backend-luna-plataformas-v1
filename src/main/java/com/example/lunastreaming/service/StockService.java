@@ -528,7 +528,7 @@ public class StockService {
         final String searchQuery = (q == null || q.isBlank()) ? null : q.trim();
 
         // 2. Definir los estados a incluir. (Usamos la constante del repositorio)
-        List<String> statuses = List.of("sold", "REFUND", "refund_confirmed", "requested", "support");
+        List<String> statuses = List.of("sold", "REFUND", "refund_confirmed", "requested", "support", "RENEWED");
 
         // 3. Llamar al nuevo método unificado del repositorio
         // Este método busca por estado Y aplica el filtro de búsqueda si searchQuery NO es null
