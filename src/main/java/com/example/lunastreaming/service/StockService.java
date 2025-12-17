@@ -510,6 +510,7 @@ public class StockService {
         int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
         int safePage = Math.max(0, page);
 
+        // Lógica de ordenamiento
         Sort sortObj = Sort.by(Sort.Direction.DESC, "soldAt");
         if (sort != null && !sort.isBlank()) {
             String[] parts = sort.split(",");
@@ -521,10 +522,22 @@ public class StockService {
         }
         Pageable pageable = PageRequest.of(safePage, safeSize, sortObj);
 
-        // 👇 ahora buscamos múltiples estados
-        List<String> statuses = List.of("sold", "REFUND", "refund_confirmed", "requested");
-        Page<StockEntity> pageResult = stockRepository.findByStatusIn(statuses, pageable);
+        // **************** INICIO LÓGICA DE BÚSQUEDA Y REPOSITORIO ****************
 
+        // 1. Limpiar y determinar el término de búsqueda. Será 'null' si está vacío.
+        final String searchQuery = (q == null || q.isBlank()) ? null : q.trim();
+
+        // 2. Definir los estados a incluir. (Usamos la constante del repositorio)
+        List<String> statuses = List.of("sold", "REFUND", "refund_confirmed", "requested", "support");
+
+        // 3. Llamar al nuevo método unificado del repositorio
+        // Este método busca por estado Y aplica el filtro de búsqueda si searchQuery NO es null
+        Page<StockEntity> pageResult = stockRepository.findByStatusInAndSearch(statuses, searchQuery, pageable);
+
+        // **************** FIN LÓGICA DE BÚSQUEDA Y REPOSITORIO ****************
+
+
+        // 4. Mapeo de Proveedores (lógica existente)
         List<UUID> providerIds = pageResult.stream()
                 .map(StockEntity::getProduct)
                 .filter(Objects::nonNull)
@@ -537,10 +550,12 @@ public class StockService {
         if (providerIds.isEmpty()) {
             providerMap = Collections.emptyMap();
         } else {
+            // Asumimos que userRepository.findByIdIn está definido
             List<UserEntity> providers = userRepository.findByIdIn(providerIds);
             providerMap = providers.stream().collect(Collectors.toMap(UserEntity::getId, Function.identity()));
         }
 
+        // 5. Mapeo de Entidad a Respuesta (StockResponse)
         List<StockResponse> content = pageResult.stream()
                 .map(stock -> {
                     StockResponse resp = stockBuilder.toStockResponse(stock);
@@ -556,6 +571,7 @@ public class StockService {
                 })
                 .collect(Collectors.toList());
 
+        // 6. Retorno de la Respuesta Paginada
         Page<StockResponse> mappedPage = new PageImpl<>(content, pageable, pageResult.getTotalElements());
         return toPagedResponse(mappedPage);
     }

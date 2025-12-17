@@ -50,7 +50,21 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 
     Page<UserEntity> findByRoleIn(Collection<String> roles, Pageable pageable);
 
-
-
+    // Repository
+// Nuevo método que acepta dos parámetros: digits (para teléfono) y usernameQuery (para username)
+    @Query(value = "SELECT u.id AS id, u.username AS username, u.phone AS phone " +
+            "FROM users u " +
+            "WHERE (" +
+            "    (:digits IS NOT NULL AND regexp_replace(COALESCE(u.phone, ''), '\\\\D', '', 'g') LIKE CONCAT('%', :digits, '%')) " +
+            "    OR " +
+            "    (LOWER(u.username) LIKE CONCAT('%', :usernameQuery, '%')) " +
+            ") " +
+            "ORDER BY u.username ASC " +
+            "LIMIT :limit", nativeQuery = true)
+    List<Object[]> findByPhoneDigitsOrUsername(
+            @Param("digits") String digits,
+            @Param("usernameQuery") String usernameQuery,
+            @Param("limit") int limit
+    );
 
 }

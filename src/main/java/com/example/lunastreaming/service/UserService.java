@@ -351,5 +351,43 @@ public class UserService {
         userRepository.save(target);
     }
 
+    // Service
+    public List<UserPhoneDto> searchByPhoneOrUsername(String rawQuery, Integer limitOpt) {
+        if (!StringUtils.hasText(rawQuery)) return List.of();
+
+        int limit = (limitOpt == null) ? DEFAULT_LIMIT : Math.min(limitOpt, MAX_LIMIT);
+        String normalizedQuery = rawQuery.trim().toLowerCase();
+
+        // 1. Intentar como Búsqueda por Teléfono (dígitos)
+        String digits = sanitizeDigits(rawQuery);
+        if (digits.length() >= 2 && digits.length() <= 20) {
+            // Opción 1: Buscar por dígitos del teléfono
+            List<Object[]> rows = userRepository.findByPhoneDigitsOrUsername(digits, normalizedQuery, limit);
+            return mapRowsToDto(rows);
+        }
+
+        // 2. Si no es un número de teléfono válido, o si es corto, buscar solo por Username
+        // NOTA: Usaremos el mismo método de Repository, pero solo pasaremos el normalizedQuery
+
+        // Si la longitud de la consulta es muy corta para username, podemos imponer un mínimo (opcional)
+        if (normalizedQuery.length() < 3) return List.of();
+
+        List<Object[]> rows = userRepository.findByPhoneDigitsOrUsername(null, normalizedQuery, limit);
+        return mapRowsToDto(rows);
+    }
+
+    // Método auxiliar para mapear el resultado (para mantener el código limpio)
+    private List<UserPhoneDto> mapRowsToDto(List<Object[]> rows) {
+        List<UserPhoneDto> out = new ArrayList<>(rows.size());
+        for (Object[] r : rows) {
+            // order of columns in query: id, username, phone
+            java.util.UUID id = (java.util.UUID) r[0];
+            String username = (String) r[1];
+            String phone = (String) r[2];
+            out.add(new UserPhoneDto(id, username, phone));
+        }
+        return out;
+    }
+
 
 }

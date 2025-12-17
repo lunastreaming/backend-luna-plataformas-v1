@@ -132,5 +132,33 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
 
     Page<StockEntity> findByStatusIn(List<String> statuses, Pageable pageable);
 
+
+    @Query("""
+        SELECT s FROM StockEntity s
+        LEFT JOIN FETCH s.product p
+        LEFT JOIN FETCH s.buyer b
+        LEFT JOIN UserEntity v ON v.id = p.providerId
+        WHERE s.status IN :statuses
+        AND (:q IS NULL OR :q = '' OR
+             CAST(s.id AS string) LIKE CONCAT('%', :q, '%') OR
+             LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) OR
+             LOWER(b.username) LIKE LOWER(CONCAT('%', :q, '%')) OR
+             LOWER(v.username) LIKE LOWER(CONCAT('%', :q, '%')) OR
+             
+             LOWER(s.status) LIKE 
+                CASE 
+                    WHEN LOWER(:q) LIKE '%reembolso%' THEN '%refund%'
+                    WHEN LOWER(:q) LIKE '%venta%' THEN '%sold%'
+                    WHEN LOWER(:q) LIKE '%soporte%' THEN '%support%'
+                    WHEN LOWER(:q) LIKE '%a pedido%' THEN '%requested%'
+                    ELSE LOWER(CONCAT('%', :q, '%')) 
+                END
+        )
+    """)
+    Page<StockEntity> findByStatusInAndSearch(
+            @Param("statuses") List<String> statuses,
+            @Param("q") String q,
+            Pageable pageable
+    );
 }
 

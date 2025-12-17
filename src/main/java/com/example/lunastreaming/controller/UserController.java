@@ -71,10 +71,11 @@ public class UserController {
     }
 
     // GET /api/users/search-by-phone?q=923&limit=10
-    @GetMapping("/search-by-phone")
-    public ResponseEntity<List<UserPhoneDto>> searchByPhone(@RequestParam("q") String q,
-                                                            @RequestParam(value = "limit", required = false) Integer limit) {
-        List<UserPhoneDto> result = userService.searchByPhoneDigits(q, limit);
+    @GetMapping("/search") // Cambio de nombre
+    public ResponseEntity<List<UserPhoneDto>> search(@RequestParam("q") String q,
+                                                     @RequestParam(value = "limit", required = false) Integer limit) {
+        // Se mantiene la llamada al servicio, pero el service ahora manejará ambas búsquedas
+        List<UserPhoneDto> result = userService.searchByPhoneOrUsername(q, limit); // Nuevo nombre de método
         return ResponseEntity.ok(result);
     }
 

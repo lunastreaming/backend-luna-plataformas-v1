@@ -42,6 +42,9 @@ public class SupportTicketService {
                 .updatedAt(Instant.now())
                 .build();
 
+        stock.setStatus("support");
+        stockRepository.save(stock);
+
         return toDTO(supportTicketRepository.save(entity));
     }
 
@@ -99,13 +102,14 @@ public class SupportTicketService {
         }
 
         if (request.getNumberProfile() != null) stock.setNumeroPerfil(request.getNumberProfile());
-        if (request.getStatus() != null) stock.setStatus(request.getStatus());
         if (request.getPin() != null) stock.setPin(request.getPin());
         if (request.getClientName() != null) stock.setClientName(request.getClientName());
         if (request.getClientPhone() != null) stock.setClientPhone(request.getClientPhone());
 
         // 3) Nota de resolución en el stock
         if (request.getResolutionNote() != null) stock.setResolutionNote(request.getResolutionNote());
+
+        stock.setStatus("sold");
 
         // 4) Persistir cambios
         stockRepository.save(stock);
