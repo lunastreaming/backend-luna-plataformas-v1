@@ -72,7 +72,8 @@ public class UserService {
         if ("provider".equalsIgnoreCase(req.role)) {
             ProviderProfileEntity provider = ProviderProfileEntity.builder()
                     .user(userEntity)
-                    .canTransfer(Boolean.FALSE) // default
+                    .canTransfer(Boolean.FALSE)// default
+                    .status("inactive")// default
                     .build();
             providerProfileRepository.save(provider);
         } else if ("seller".equalsIgnoreCase(req.role)) {
