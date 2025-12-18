@@ -110,6 +110,14 @@ public class AdminController {
                 .build();
     }
 
-
+    @PatchMapping("/{id}/phone")
+    public ResponseEntity<Void> changeUserPhone(
+            @PathVariable("id") UUID userId,
+            @Valid @RequestBody UpdatePhoneRequest req,
+            Principal principal
+    ) {
+        userService.adminChangePhone(userId, req, principal.getName());
+        return ResponseEntity.noContent().build();
+    }
 
 }

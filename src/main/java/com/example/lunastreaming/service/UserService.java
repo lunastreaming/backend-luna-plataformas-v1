@@ -390,5 +390,29 @@ public class UserService {
         return out;
     }
 
+    @Transactional
+    public void adminChangePhone(UUID targetUserId, UpdatePhoneRequest request, String userId) {
 
+        // 1. Validar que el actor sea ADMIN (puedes centralizar esto luego)
+        UserEntity actor = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new IllegalArgumentException("actor_not_found"));
+
+        if (!"admin".equalsIgnoreCase(actor.getRole())) {
+            throw new SecurityException("forbidden");
+        }
+
+        // 2. Validar si el teléfono ya está en uso por OTRO usuario
+        boolean exists = userRepository.existsByPhone(request.getNewPhone());
+        if (exists) {
+            throw new IllegalArgumentException("phone_already_exists");
+        }
+
+        // 3. Buscar usuario objetivo
+        UserEntity target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("user_not_found"));
+
+        // 4. Actualizar
+        target.setPhone(request.getNewPhone());
+        userRepository.save(target);
+    }
 }

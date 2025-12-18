@@ -67,4 +67,6 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
             @Param("limit") int limit
     );
 
+    boolean existsByPhone(String phone);
+
 }
