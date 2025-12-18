@@ -75,6 +75,8 @@ public class StockController {
         return ResponseEntity.noContent().build();
     }
 
+
+    //Activa el stock 1 a 1
     @PatchMapping("/{id}/status")
     public ResponseEntity<StockResponse> changeStatus(
             @PathVariable Long id,
@@ -89,6 +91,20 @@ public class StockController {
         // pasa principal.getName() al servicio (el servicio resolverá ownership/roles)
         StockResponse updated = stockService.setStatus(id, request.getStatus().trim(), principal);
         return ResponseEntity.ok(updated);
+    }
+
+    //Activa una lista de stocks
+    @PatchMapping("/bulk-activate")
+    public ResponseEntity<Void> bulkActivate(
+            @RequestBody BulkActiveRequest request,
+            Principal principal) {
+
+        if (request.ids() == null || request.ids().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        stockService.activateMultipleStocks(request.ids(), principal);
+        return ResponseEntity.noContent().build(); // 204 No Content es ideal para updates masivos exitosos
     }
 
     //Endpoint para comprar un stock

@@ -983,4 +983,39 @@ public class StockService {
         stockRepository.save(stock);
     }
 
+    @Transactional
+    public void activateMultipleStocks(List<Long> stockIds, Principal principal) {
+        UUID requesterProviderId = resolveProviderIdFromPrincipal(principal);
+
+        // 1. Traemos todos los stocks en una sola consulta
+        List<StockEntity> stocks = stockRepository.findAllById(stockIds);
+
+        // 2. Validación de integridad: ¿Existen todos los IDs enviados?
+        if (stocks.size() != stockIds.size()) {
+            throw new IllegalArgumentException("Uno o más IDs de stock no existen en el sistema.");
+        }
+
+        for (StockEntity stock : stocks) {
+            // 3. Validación de Propiedad (Ownership)
+            UUID stockProviderId = stock.getProduct().getProviderId();
+            if (!requesterProviderId.equals(stockProviderId)) {
+                throw new AccessDeniedException("No tienes permiso sobre el stock ID: " + stock.getId());
+            }
+
+            // 4. Validación de Estado: Solo permitimos cambiar de 'inactive' a 'active'
+            // Si ya está 'active', podrías decidir si fallar o no.
+            // Aquí fallamos si el estado no es estrictamente 'inactive'.
+            if (!"inactive".equalsIgnoreCase(stock.getStatus())) {
+                throw new IllegalStateException("El stock con ID " + stock.getId() +
+                        " no puede ser activado porque su estado actual es: " + stock.getStatus());
+            }
+
+            // 5. Cambio de estado
+            stock.setStatus("active");
+        }
+
+        // 6. Persistencia (Hibernate detecta los cambios y hace el update al final de la transacción)
+        stockRepository.saveAll(stocks);
+    }
+
 }
