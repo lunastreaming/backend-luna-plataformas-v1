@@ -22,16 +22,18 @@ public class UserController {
 
     @GetMapping("/sellers")
     public ResponseEntity<Page<UserSummary>> listSellers(
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(userService.listByRole("seller", page, size));
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(userService.listByRole("seller", search, page, size));
     }
 
     @GetMapping("/providers")
     public ResponseEntity<Page<UserSummary>> listProviders(
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(userService.listByRole("provider", page, size));
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(userService.listByRole("provider", search, page, size));
     }
 
 

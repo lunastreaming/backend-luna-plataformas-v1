@@ -143,7 +143,25 @@ public class UserService {
                 .build();
     }
 
+    public Page<UserSummary> listByRole(String role, String search, int page, int size) {
+        Pageable pageable = PageRequest.of(
+                Math.max(0, page),
+                Math.max(1, size),
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        );
 
+        List<String> rolesToFilter;
+        if ("seller".equalsIgnoreCase(role)) {
+            rolesToFilter = Arrays.asList("seller", "user");
+        } else {
+            rolesToFilter = Collections.singletonList(role);
+        }
+
+        // Usamos el nuevo método del repositorio que maneja search si no es null
+        Page<UserEntity> users = userRepository.findAllByRolesAndSearch(rolesToFilter, search, pageable);
+
+        return users.map(UserMapper::toSummary);
+    }
 
     public Page<UserSummary> listByRole(String role, int page, int size) {
         Pageable pageable = PageRequest.of(

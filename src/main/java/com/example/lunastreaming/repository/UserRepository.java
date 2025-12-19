@@ -69,4 +69,14 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 
     boolean existsByPhone(String phone);
 
+    @Query("SELECT u FROM UserEntity u WHERE u.role IN :roles AND " +
+            "(:search IS NULL OR " +
+            "LOWER(CAST(u.username AS string)) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+            "CAST(u.phone AS string) LIKE CONCAT('%', CAST(:search AS string), '%'))")
+    Page<UserEntity> findAllByRolesAndSearch(
+            @Param("roles") List<String> roles,
+            @Param("search") String search,
+            Pageable pageable
+    );
+
 }
