@@ -40,6 +40,8 @@ public class ProductDto {
 
     private BigDecimal salePrice;
 
+    private BigDecimal salePriceSoles;
+
     private BigDecimal renewalPrice;
 
     private Boolean isRenewable;

@@ -39,6 +39,7 @@ public class ProductService {
     private final ProductBuilder productBuilder;
     private final CategoryRepository categoryRepository;
     private final WalletTransactionRepository walletTransactionRepository;
+    private final ExchangeRateRepository exchangeRateRepository;
 
     // zona a usar para el cálculo (ajusta si usas otra)
     private final ZoneId zone = ZoneId.of("America/Lima");
@@ -406,6 +407,12 @@ public class ProductService {
                     String providerName = resolveProviderDisplayName(provider);
 
                     ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName, provider);
+                    ExchangeRate rate = exchangeRateRepository.findFirstByOrderByCreatedAtDesc()
+                            .orElseThrow(() -> new RuntimeException("No se encontraron tasas de cambio"));
+
+                    dto.setSalePriceSoles(rate.getRate().multiply(dto.getSalePrice())
+                            .setScale(2, RoundingMode.HALF_UP));
+
 
                     List<StockEntity> stockForProduct = stocksByProduct.getOrDefault(entity.getId(), Collections.emptyList());
                     long stockCount = stockForProduct.size();
@@ -506,6 +513,12 @@ public class ProductService {
                     String providerName = resolveProviderDisplayName(provider);
 
                     ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName, provider);
+
+                    ExchangeRate rate = exchangeRateRepository.findFirstByOrderByCreatedAtDesc()
+                            .orElseThrow(() -> new RuntimeException("No se encontraron tasas de cambio"));
+
+                    dto.setSalePriceSoles(rate.getRate().multiply(dto.getSalePrice())
+                            .setScale(2, RoundingMode.HALF_UP));
 
                     long stockCount = stockCountByProduct.getOrDefault(entity.getId(), 0L);
 
