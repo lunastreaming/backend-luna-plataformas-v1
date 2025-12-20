@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -54,11 +55,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if (claims != null) {
                     String userId = claims.getSubject();
                     if (userId != null && !userId.isBlank()) {
-                        // En este punto puedes mapear roles desde claims si es necesario
+                        // 1. Extraer el rol del claim
+                        String role = claims.get("role", String.class);
+
+                        // 2. Crear la lista de autoridades
+                        // Usaremos el prefijo ROLE_ para que funcione con hasRole('seller')
+                        List<SimpleGrantedAuthority> authorities = List.of();
+                        if (role != null) {
+                            authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
+                        }
+
+                        // 3. Pasar las autoridades al objeto de autenticación
                         UsernamePasswordAuthenticationToken auth =
-                                new UsernamePasswordAuthenticationToken(userId, null, List.of());
+                                new UsernamePasswordAuthenticationToken(userId, null, authorities);
+
                         SecurityContextHolder.getContext().setAuthentication(auth);
-                        log.debug("JWT validado para principal: {}", userId);
+                        log.debug("JWT validado para principal: {} con rol: {}", userId, role);
                     } else {
                         log.debug("JWT válido pero sin subject en claims");
                         SecurityContextHolder.clearContext();

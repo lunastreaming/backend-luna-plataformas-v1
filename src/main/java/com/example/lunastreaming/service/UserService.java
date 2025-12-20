@@ -347,13 +347,6 @@ public class UserService {
 
     @Transactional
     public void adminChangePassword(UUID targetUserId, AdminChangePasswordRequest req, String actorUsername) {
-        // 1) Validar que el actor exista y sea admin
-        UserEntity actor = userRepository.findById(UUID.fromString(actorUsername))
-                .orElseThrow(() -> new IllegalArgumentException("actor_not_found"));
-
-        if (!"admin".equalsIgnoreCase(actor.getRole())) {
-            throw new SecurityException("forbidden");
-        }
 
         // 2) Validar la longitud mínima > 8 (sin política de robustez adicional)
         String newPwd = req.getNewPassword();
