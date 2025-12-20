@@ -268,10 +268,12 @@ public class StockService {
 
     @Transactional
     public StockResponse purchaseProduct(UUID productId, PurchaseRequest req, Principal principal) {
-        UUID buyerId = resolveUserIdFromPrincipal(principal);
 
-        UserEntity buyer = userRepository.findById(buyerId)
+        UserEntity buyer = userRepository.findById(UUID.fromString(principal.getName()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comprador no encontrado"));
+        if (!Objects.equals(buyer.getRole(), "seller")) {
+            throw new AccessDeniedException("El usuario no cuenta con los accesos para esta acción");
+        }
 
         if (!passwordEncoder.matches(req.getPassword(), buyer.getPasswordHash())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña ingresada es incorrecta");
