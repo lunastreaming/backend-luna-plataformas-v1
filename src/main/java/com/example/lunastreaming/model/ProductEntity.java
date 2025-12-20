@@ -84,4 +84,11 @@ public class ProductEntity {
         this.updatedAt = Instant.now();
     }
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id", insertable = false, updatable = false)
+    private CategoryEntity category;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "provider_id", insertable = false, updatable = false)
+    private UserEntity provider;
 }
