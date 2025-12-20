@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -26,6 +27,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.CriteriaBuilder;
 
 @Service
 @RequiredArgsConstructor
@@ -325,97 +332,74 @@ public class ProductService {
      * Devuelve Page<ProductDto>.
      */
     @Transactional(readOnly = true)
-    public Page<ProductHomeResponse> listActiveProductsWithDetails(Pageable pageable) {
-        Page<ProductEntity> page = productRepository.findByActiveTrue(pageable);
+    public Page<ProductHomeResponse> listActiveProductsWithDetails(String query, Pageable pageable) {
+        // 1) Obtener tasa de cambio UNA SOLA VEZ
+        ExchangeRate rate = exchangeRateRepository.findFirstByOrderByCreatedAtDesc()
+                .orElseThrow(() -> new RuntimeException("No se encontraron tasas de cambio"));
+
+        // 2) Definición de la búsqueda dinámica (Global Search)
+        Specification<ProductEntity> spec = (root, criteriaQuery, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.isTrue(root.get("active")));
+
+            if (query != null && !query.trim().isEmpty()) {
+                String pattern = "%" + query.toLowerCase() + "%";
+                // Nota: root.join requiere que tengas las relaciones @ManyToOne en tu ProductEntity
+                Predicate globalSearch = cb.or(
+                        cb.like(cb.lower(root.get("name")), pattern),
+                        cb.like(cb.lower(root.join("category", JoinType.LEFT).get("name")), pattern),
+                        cb.like(cb.lower(root.join("provider", JoinType.LEFT).get("username")), pattern)
+                );
+                predicates.add(globalSearch);
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        // 3) Ejecutar búsqueda paginada
+        Page<ProductEntity> page = productRepository.findAll(spec, pageable);
 
         if (page.isEmpty()) {
-            return new PageImpl<>(Collections.emptyList(), pageable, page.getTotalElements());
+            return new PageImpl<>(Collections.emptyList(), pageable, 0);
         }
 
-        // 1) ids a cargar en bloque
-        List<Integer> categoryIds = page.stream()
-                .map(ProductEntity::getCategoryId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.toList());
+        // 4) Carga masiva de datos relacionados (Tu lógica original optimizada)
+        List<Integer> categoryIds = page.stream().map(ProductEntity::getCategoryId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        List<UUID> providerIds = page.stream().map(ProductEntity::getProviderId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        List<UUID> productIds = page.stream().map(ProductEntity::getId).distinct().collect(Collectors.toList());
 
-        List<UUID> providerIds = page.stream()
-                .map(ProductEntity::getProviderId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.toList());
+        Map<Integer, String> categoryNames = categoryIds.isEmpty() ? Collections.emptyMap() :
+                categoryRepository.findAllById(categoryIds).stream().collect(Collectors.toMap(CategoryEntity::getId, CategoryEntity::getName, (a, b) -> a));
 
-        List<UUID> productIds = page.stream()
-                .map(ProductEntity::getId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.toList());
+        Map<UUID, UserEntity> providersById = providerIds.isEmpty() ? Collections.emptyMap() :
+                userRepository.findAllById(providerIds).stream().collect(Collectors.toMap(UserEntity::getId, Function.identity(), (a, b) -> a));
 
-        // 2) cargar categorías y mapear id -> name
-        Map<Integer, String> categoryNames = categoryIds.isEmpty()
-                ? Collections.emptyMap()
-                : categoryRepository.findAllById(categoryIds).stream()
-                .filter(Objects::nonNull)
-                .collect(Collectors.toMap(CategoryEntity::getId, CategoryEntity::getName, (a, b) -> a));
-
-        // 3) cargar proveedores y mapear id -> UserEntity
-        Map<UUID, UserEntity> providersById = providerIds.isEmpty()
-                ? Collections.emptyMap()
-                : userRepository.findAllById(providerIds).stream()
-                .filter(Objects::nonNull)
-                .collect(Collectors.toMap(UserEntity::getId, Function.identity(), (a, b) -> a));
-
-        // 4) cargar stocks por productIds y filtrar sólo stocks "disponibles"
-        List<StockEntity> stockRows = productIds.isEmpty()
-                ? Collections.emptyList()
-                : stockRepository.findByProductIdIn(productIds).stream()
-                .filter(Objects::nonNull)
+        // Carga de Stocks filtrada
+        // Dentro del método listActiveProductsWithDetails
+        Map<UUID, List<StockEntity>> stocksByProduct = stockRepository.findByProductIdIn(productIds).stream()
                 .filter(s -> {
-                    // mantener sólo stocks que estén "active" o publicados
-                    String status = null;
-                    try { status = s.getStatus(); } catch (Exception ignored) {}
-                    Boolean published = null;
-                    try {
-                        Object p = s.getClass().getMethod("getPublished").invoke(s);
-                        if (p instanceof Boolean) published = (Boolean) p;
-                    } catch (Exception ignored) {}
-                    return ("active".equalsIgnoreCase(status)) || Boolean.TRUE.equals(published);
+                    // 1. Que el estado sea "active"
+                    boolean isActive = "active".equalsIgnoreCase(s.getStatus());
+
+                    // 2. Que no haya sido vendido (buyer es null y soldAt es null)
+                    boolean isNotSold = s.getBuyer() == null && s.getSoldAt() == null;
+
+                    return isActive && isNotSold;
                 })
-                .collect(Collectors.toList());
+                .collect(Collectors.groupingBy(s -> s.getProduct().getId()));
 
-        // agrupar por productId
-        Map<UUID, List<StockEntity>> stocksByProduct = stockRows.stream()
-                .collect(Collectors.groupingBy(s -> {
-                    try {
-                        if (s.getProduct() != null && s.getProduct().getId() != null) return s.getProduct().getId();
-                    } catch (Exception ignored) {}
-                    try {
-                        Object pid = s.getClass().getMethod("getProductId").invoke(s);
-                        if (pid instanceof UUID) return (UUID) pid;
-                    } catch (Exception ignored) {}
-                    return null;
-                }))
-                .entrySet().stream()
-                .filter(e -> e.getKey() != null)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-        // 5) mapear a ProductWithStockCountResponse
+        // 5) Mapeo a Response DTO
         List<ProductHomeResponse> responses = page.stream()
                 .map(entity -> {
-                    String categoryName = entity.getCategoryId() == null ? null : categoryNames.get(entity.getCategoryId());
+                    String catName = entity.getCategoryId() == null ? null : categoryNames.get(entity.getCategoryId());
                     UserEntity provider = entity.getProviderId() == null ? null : providersById.get(entity.getProviderId());
-                    String providerName = resolveProviderDisplayName(provider);
+                    String provName = resolveProviderDisplayName(provider);
 
-                    ProductDto dto = productBuilder.productDtoFromEntity(entity, categoryName, providerName, provider);
-                    ExchangeRate rate = exchangeRateRepository.findFirstByOrderByCreatedAtDesc()
-                            .orElseThrow(() -> new RuntimeException("No se encontraron tasas de cambio"));
+                    ProductDto dto = productBuilder.productDtoFromEntity(entity, catName, provName, provider);
 
-                    dto.setSalePriceSoles(rate.getRate().multiply(dto.getSalePrice())
-                            .setScale(2, RoundingMode.HALF_UP));
+                    // Conversión de moneda usando la 'rate' cargada al inicio
+                    dto.setSalePriceSoles(rate.getRate().multiply(dto.getSalePrice()).setScale(2, RoundingMode.HALF_UP));
 
-
-                    List<StockEntity> stockForProduct = stocksByProduct.getOrDefault(entity.getId(), Collections.emptyList());
-                    long stockCount = stockForProduct.size();
+                    long stockCount = stocksByProduct.getOrDefault(entity.getId(), Collections.emptyList()).size();
 
                     return ProductHomeResponse.builder()
                             .product(dto)
@@ -425,7 +409,6 @@ public class ProductService {
                 .collect(Collectors.toList());
 
         return new PageImpl<>(responses, pageable, page.getTotalElements());
-
     }
 
     /**

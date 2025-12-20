@@ -60,8 +60,10 @@ public class CategoryController {
     }
 
     @GetMapping("/products/active")
-    public Page<ProductHomeResponse> listActiveProducts(Pageable pageable) {
-        return productService.listActiveProductsWithDetails(pageable);
+    public Page<ProductHomeResponse> listActiveProducts(
+            @RequestParam(required = false) String query,
+            Pageable pageable) {
+        return productService.listActiveProductsWithDetails(query, pageable);
     }
 
     // Lista productos activos por categoria (paginado)
