@@ -74,7 +74,7 @@ public class ProductService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        List<StockEntity> stocks = stockRepository.findByProductIdIn(productIds);
+        List<StockEntity> stocks = stockRepository.findByProductIdInAndStatus(productIds, "active");
 
         // 3) Agrupar stocks por productId
         Map<UUID, List<StockEntity>> stocksByProduct = stocks.stream()

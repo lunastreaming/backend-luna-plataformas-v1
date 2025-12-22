@@ -42,4 +42,5 @@ public interface ProductRepository extends JpaRepository<ProductEntity, UUID>, J
     Page<ProductDto> findActiveProductsWithCategoryByCategoryId(@Param("categoryId") Integer categoryId, Pageable pageable);
 
 
+
 }

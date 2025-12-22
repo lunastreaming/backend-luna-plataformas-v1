@@ -21,6 +21,8 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
 
     List<StockEntity> findByProductIdIn(List<UUID> productIds);
 
+    List<StockEntity> findByProductIdInAndStatus(List<UUID> productIds, String status);
+
     @Query("select s.product.id, count(s) from StockEntity s where s.product.id in :ids group by s.product.id")
     List<Object[]> countByProductIds(@Param("ids") Collection<UUID> ids);
 
