@@ -501,4 +501,30 @@ public class WalletService {
         return savedExtorno;
     }
 
+    @Transactional
+    public void depositToUser(UUID userId, BigDecimal amount) {
+        // 1. Buscar al usuario destino
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        // 2. Actualizar el balance (Incremento directo)
+        user.setBalance(user.getBalance().add(amount));
+        userRepository.save(user);
+
+        // 3. Registrar la transacción en la Wallet
+        WalletTransaction depositTx = WalletTransaction.builder()
+                .user(user)
+                .type("transfer") // Un tipo distinto para reportes
+                .amount(amount)
+                .currency("USD")
+                .status("approved")
+                .createdAt(Instant.now())
+                .description("Transferencia a la nueva plataforma")
+                .realAmount(amount)
+                .exchangeApplied(false)
+                .build();
+
+        walletTransactionRepository.save(depositTx);
+    }
+
 }

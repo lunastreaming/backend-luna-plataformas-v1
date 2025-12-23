@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.security.Principal;
 import java.util.Map;
 import java.util.UUID;
@@ -119,6 +120,21 @@ public class AdminController {
             Principal principal
     ) {
         userService.adminChangePhone(userId, req, principal.getName());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/admin/deposit-to-user")
+    @PreAuthorize("hasRole('admin')")
+    public ResponseEntity<Void> adminDeposit(@RequestBody AdminDepositRequest request) {
+
+        // Validación básica de monto
+        if (request.getAmount() == null || request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        // Llamada al servicio
+        walletService.depositToUser(request.getUserId(), request.getAmount());
+
         return ResponseEntity.noContent().build();
     }
 
