@@ -281,7 +281,7 @@ public class WalletService {
         Pageable pageable = PageRequest.of(Math.max(0, page), PAGE_SIZE, sort);
 
         // Tipos permitidos: recharge y withdrawal
-        List<String> allowedTypes = Arrays.asList("recharge", "withdrawal", "chargeback", "transfer");
+        List<String> allowedTypes = Arrays.asList("recharge", "withdrawal", "chargeback", "transfer", "publish");
 
         // Excluir transacciones con status = 'cancelled' y filtrar por tipo
         Page<WalletTransaction> pageTx = walletTransactionRepository.findByTypeInAndStatusNot(allowedTypes, "cancelled", pageable);

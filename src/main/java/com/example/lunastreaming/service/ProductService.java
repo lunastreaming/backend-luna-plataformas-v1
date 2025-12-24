@@ -148,46 +148,11 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductEntity updateIfOwner(UUID id, ProductEntity payload, String principalName) {
+    public void updateIfOwner(UUID id, ProductEntity payload) {
         ProductEntity existing = productRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto no encontrado"));
-
-        // === 1) validar propiedad ===
-        // Opción A: si Principal.name contiene el UUID del proveedor
-        UUID principalProviderId = null;
-        try {
-            principalProviderId = UUID.fromString(principalName);
-        } catch (IllegalArgumentException ex) {
-            principalProviderId = null;
-        }
-
-        if (principalProviderId != null) {
-            if (!principalProviderId.equals(existing.getProviderId())) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes permiso para editar este producto");
-            }
-        } else {
-            // Opción B: si Principal.name es username -> resolver providerId via UserRepository
-            // Ajusta según tu modelo de usuario
-            UserEntity user = userRepository.findByUsername(principalName)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Usuario no autorizado"));
-            if (!user.getId().equals(existing.getProviderId())) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes permiso para editar este producto");
-            }
-        }
-
-        // === 2) merge selectivo (no sobrescribir con nulls) ===
-        // conservar campos obligatorios y audit fields
         mergeNonNull(existing, payload);
-
-        // asegurar que campos NOT NULL nunca queden null (preservar existentes si payload trae null)
-        if (existing.getActive() == null) existing.setActive(Boolean.TRUE);
-        if (existing.getIsRenewable() == null) existing.setIsRenewable(Boolean.FALSE);
-        if (existing.getIsOnRequest() == null) existing.setIsOnRequest(Boolean.FALSE);
-        if (existing.getSalePrice() == null) existing.setSalePrice(BigDecimal.ZERO);
-        if (existing.getCreatedAt() == null) existing.setCreatedAt(Instant.now());
-        // updatedAt será cambiado por @PreUpdate
-
-        return productRepository.save(existing);
+        productRepository.save(existing);
     }
 
     // Mergea SOLO los campos no nulos del source hacia target
@@ -204,9 +169,6 @@ public class ProductService {
         if (source.getIsOnRequest() != null) target.setIsOnRequest(source.getIsOnRequest());
         if (source.getActive() != null) target.setActive(source.getActive());
         if (source.getImageUrl() != null) target.setImageUrl(source.getImageUrl());
-
-        // No tocar providerId, createdAt ni id para no cambiar la propiedad ni la auditoría
-        // Si quieres permitir cambiar providerId explícitamente, controla la lógica aquí
     }
 
 

@@ -5,6 +5,7 @@ import com.example.lunastreaming.model.ProductResponse;
 import com.example.lunastreaming.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -44,15 +45,14 @@ public class ProductController {
     }
 
 
+    @PreAuthorize("hasRole('provider')")
     @PutMapping("/{id}")
-    public ResponseEntity<ProductEntity> update(
+    public ResponseEntity<Void> update(
             @PathVariable UUID id,
-            @RequestBody ProductEntity product,
-            Principal principal) {
+            @RequestBody ProductEntity product) {
 
-        String username = principal.getName();
-        ProductEntity updated = productService.updateIfOwner(id, product, username);
-        return ResponseEntity.ok(updated);
+        productService.updateIfOwner(id, product);
+        return ResponseEntity.noContent().build();
     }
 
 
