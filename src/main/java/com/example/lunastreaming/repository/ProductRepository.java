@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -41,6 +42,10 @@ public interface ProductRepository extends JpaRepository<ProductEntity, UUID>, J
   """)
     Page<ProductDto> findActiveProductsWithCategoryByCategoryId(@Param("categoryId") Integer categoryId, Pageable pageable);
 
-
+    @Modifying
+    @Query(value = "UPDATE products SET active = false, updated_at = now() " +
+            "WHERE active = true AND publish_end IS NOT NULL " +
+            "AND publish_end < CURRENT_DATE", nativeQuery = true)
+    int deactivateExpiredProducts();
 
 }
