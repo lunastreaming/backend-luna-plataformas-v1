@@ -1020,4 +1020,13 @@ public class StockService {
         stockRepository.saveAll(stocks);
     }
 
+    @Transactional
+    public void updateClientPhone(Long id, String newPhone) {
+        StockEntity stock = stockRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Stock no encontrado"));
+
+        stock.setClientPhone(newPhone);
+        stockRepository.save(stock);
+    }
+
 }

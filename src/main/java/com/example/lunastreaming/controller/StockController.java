@@ -5,10 +5,12 @@ import com.example.lunastreaming.service.StockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -193,5 +195,17 @@ public class StockController {
     ) {
         stockService.confirmRefund(stockId, principal);
         return ResponseEntity.noContent().build(); // 👈 devuelve 204 sin body
+    }
+
+    @PatchMapping("/{id}/client-phone")
+    @PreAuthorize("hasRole('seller')")
+    public ResponseEntity<Void> updatePhone(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+
+        String newPhone = body.get("clientPhone");
+        stockService.updateClientPhone(id, newPhone);
+
+        return ResponseEntity.noContent().build();
     }
 }
