@@ -5,6 +5,7 @@ import com.example.lunastreaming.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -33,15 +34,17 @@ public class WalletController {
 
     // 🔒 Admin ve todas las recargas pendientes
     @GetMapping("/admin/pending")
+    @PreAuthorize("hasRole('admin')")
     public List<WalletResponse> getAllPendingRecharges(Principal principal) {
         UUID adminId = UUID.fromString(principal.getName());
-        return walletService.getAllPendingRecharges(adminId, "seller");
+        return walletService.getAllPendingRecharges("seller");
     }
 
     @GetMapping("/admin/pending-provider")
+    @PreAuthorize("hasRole('admin')")
     public List<WalletResponse> getAllPendingRechargesProvider(Principal principal) {
         UUID adminId = UUID.fromString(principal.getName());
-        return walletService.getAllPendingRecharges(adminId, "provider");
+        return walletService.getAllPendingRecharges("provider");
     }
 
 

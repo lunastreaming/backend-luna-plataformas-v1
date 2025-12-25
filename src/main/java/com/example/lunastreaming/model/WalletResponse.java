@@ -17,19 +17,21 @@ public class WalletResponse {
 
     private String user;
 
-    private String type; // recharge, withdrawal, adjustment
+    private String type;
 
     private BigDecimal amount;
 
-    private String currency = "PEN";
+    private BigDecimal amountSoles;
 
-    private Boolean exchangeApplied = false;
+    private String currency;
+
+    private Boolean exchangeApplied;
 
     private BigDecimal exchangeRate;
 
-    private String status = "pending"; // pending, approved, rejected
+    private String status;
 
-    private Instant createdAt = Instant.now();
+    private Instant createdAt;
 
     private Instant approvedAt;
 

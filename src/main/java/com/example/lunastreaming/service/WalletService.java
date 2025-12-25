@@ -171,19 +171,12 @@ public class WalletService {
 
     public List<WalletResponse> getUserPendingRecharges(UUID userId) {
         List<WalletTransaction> pending = walletTransactionRepository.findByUserIdAndStatus(userId, "pending");
-        return pending.stream().map(x -> walletBuilder.builderToWalletResponse(x))
+        return pending.stream().map(walletBuilder::builderToWalletResponse)
                 .toList();
     }
 
-    public List<WalletResponse> getAllPendingRecharges(UUID adminId, String role) {
-        UserEntity admin = userRepository.findById(adminId)
-                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
-
-        if (!"admin".equalsIgnoreCase(admin.getRole())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
-        }
-
-        List<String> types = List.of("recharge", "withdrawal"); // ajustar si necesitas más
+    public List<WalletResponse> getAllPendingRecharges(String role) {
+        List<String> types = List.of("recharge", "withdrawal");
         List<WalletTransaction> pendings = walletTransactionRepository
                 .findByStatusAndUserRoleAndTypes("pending", role, types);
 
