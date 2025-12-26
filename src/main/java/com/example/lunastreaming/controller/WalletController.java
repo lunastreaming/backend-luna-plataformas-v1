@@ -36,14 +36,12 @@ public class WalletController {
     @GetMapping("/admin/pending")
     @PreAuthorize("hasRole('admin')")
     public List<WalletResponse> getAllPendingRecharges(Principal principal) {
-        UUID adminId = UUID.fromString(principal.getName());
         return walletService.getAllPendingRecharges("seller");
     }
 
     @GetMapping("/admin/pending-provider")
     @PreAuthorize("hasRole('admin')")
     public List<WalletResponse> getAllPendingRechargesProvider(Principal principal) {
-        UUID adminId = UUID.fromString(principal.getName());
         return walletService.getAllPendingRecharges("provider");
     }
 

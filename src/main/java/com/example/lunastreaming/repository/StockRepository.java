@@ -1,9 +1,11 @@
 package com.example.lunastreaming.repository;
 
 import com.example.lunastreaming.model.StockEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -162,5 +164,9 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
             @Param("q") String q,
             Pageable pageable
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(value = "SELECT s FROM StockEntity s WHERE s.product.id = :productId AND s.status = 'active' LIMIT 1")
+    Optional<StockEntity> findFirstByProductIdAndStatusWithLock(@Param("productId") UUID productId, @Param("status") String status);
 }
 

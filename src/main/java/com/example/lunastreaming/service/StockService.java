@@ -269,9 +269,13 @@ public class StockService {
     @Transactional
     public StockResponse purchaseProduct(UUID productId, PurchaseRequest req, Principal principal) {
 
-        UserEntity buyer = userRepository.findById(UUID.fromString(principal.getName()))
+        // 1. Bloqueamos y obtenemos al COMPRADOR (Evita race conditions en el saldo)
+        UUID buyerId = UUID.fromString(principal.getName());
+        UserEntity buyer = userRepository.findByIdForUpdate(buyerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comprador no encontrado"));
-        if (!Objects.equals(buyer.getRole(), "seller")) {
+
+        // 2. Validaciones de acceso y seguridad
+        if (!"seller".equals(buyer.getRole())) {
             throw new AccessDeniedException("El usuario no cuenta con los accesos para esta acción");
         }
 
@@ -279,8 +283,10 @@ public class StockService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña ingresada es incorrecta");
         }
 
-        StockEntity stock = stockRepository.findFirstByProductIdAndStatus(productId, "active")
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No hay stock activo disponible"));
+        // 3. Bloqueamos y obtenemos el STOCK (Evita que dos personas compren el mismo)
+        // Al usar findFirst...WithLock, el segundo hilo esperará aquí hasta que el primero haga commit.
+        StockEntity stock = stockRepository.findFirstByProductIdAndStatusWithLock(productId, "active")
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ya no hay stock disponible para este producto"));
 
         ProductEntity product = stock.getProduct();
         if (product == null) {
@@ -289,15 +295,16 @@ public class StockService {
 
         BigDecimal price = product.getSalePrice();
 
+        // 4. Validar saldo con el balance bloqueado
         if (buyer.getBalance().compareTo(price) < 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Saldo insuficiente");
         }
 
-        // Descontar saldo comprador
+        // 5. Descontar saldo comprador
         buyer.setBalance(buyer.getBalance().subtract(price));
-        userRepository.save(buyer);
+        userRepository.save(buyer); // Se guarda dentro de la transacción bloqueada
 
-        // Transacción compra
+        // 6. Registrar transacción de salida de dinero
         walletTransactionRepository.save(WalletTransaction.builder()
                 .user(buyer)
                 .type("purchase")
@@ -305,12 +312,11 @@ public class StockService {
                 .currency("USD")
                 .status("approved")
                 .createdAt(Instant.now())
-                .approvedAt(Instant.now())
-                .description("COMPRA: " + product.getName() + stock.getId())
                 .exchangeApplied(false)
+                .description("COMPRA: " + product.getName() + " (Stock ID: " + stock.getId() + ")")
                 .build());
 
-        // Acreditar proveedor inmediatamente
+        // 7. Acreditar al proveedor
         UserEntity provider = userRepository.findById(product.getProviderId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
 
@@ -324,12 +330,12 @@ public class StockService {
                 .currency("USD")
                 .status("approved")
                 .createdAt(Instant.now())
-                .approvedAt(Instant.now())
-                .description("VENTA: " + product.getName()  + " ID " + stock.getId())
                 .exchangeApplied(false)
+                .description("VENTA: " + product.getName() + " (Stock ID: " + stock.getId() + ")")
                 .build());
 
-        // Marcar stock
+        // 8. Actualizar y marcar el stock como vendido
+        // El estado cambia de 'active' a 'sold/requested', por lo que el siguiente hilo ya no lo encontrará.
         stock.setBuyer(buyer);
         stock.setClientName(req.getClientName());
         stock.setClientPhone(req.getClientPhone());
@@ -337,12 +343,10 @@ public class StockService {
         stock.setPurchasePrice(price);
 
         if (Boolean.TRUE.equals(product.getIsOnRequest())) {
-            // 🚩 Caso bajo pedido: no iniciar fechas aún
             stock.setStatus("requested");
             stock.setStartAt(null);
             stock.setEndAt(null);
         } else {
-            // 🚩 Caso normal: iniciar inmediatamente
             Instant now = Instant.now();
             stock.setStartAt(now);
             Integer days = product.getDays() == null ? 0 : product.getDays();
@@ -351,9 +355,9 @@ public class StockService {
         }
 
         stockRepository.save(stock);
+
         return stockBuilder.toStockResponse(stock);
     }
-
 
 
     public UUID resolveUserIdFromPrincipal(Principal principal) {
