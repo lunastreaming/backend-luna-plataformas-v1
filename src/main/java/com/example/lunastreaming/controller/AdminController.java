@@ -138,4 +138,12 @@ public class AdminController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/toggle-emergency/{providerId}")
+    @PreAuthorize("hasRole('admin')") // Asegúrate de proteger esta ruta
+    public ResponseEntity<String> toggleEmergencyStatus(@PathVariable UUID providerId) {
+        return providerProfileService.toggleEmergencyStatus(providerId)
+                .map(provider -> ResponseEntity.ok("Estado actualizado por admin a: " + provider.getStatus()))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
 }

@@ -55,5 +55,18 @@ public class ProviderProfileService {
                 });
     }
 
+    public Optional<ProviderProfileEntity> toggleEmergencyStatus(UUID providerId) {
+        return providerProfileRepository.findByUserId(providerId)
+                .map(provider -> {
+                    // Lógica de alternancia
+                    if ("emergency".equalsIgnoreCase(provider.getStatus())) {
+                        provider.setStatus("active");
+                    } else {
+                        provider.setStatus("emergency");
+                    }
+
+                    return providerProfileRepository.save(provider);
+                });
+    }
 
 }
