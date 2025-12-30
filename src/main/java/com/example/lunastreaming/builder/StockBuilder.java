@@ -112,6 +112,8 @@ public class StockBuilder {
         entity.setClientName(stockResponse.getClientName());
         entity.setClientPhone(stockResponse.getClientPhone());
 
+        entity.setCreatedAt(Instant.now());
+
         return entity;
     }
 
