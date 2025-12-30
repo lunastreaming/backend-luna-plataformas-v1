@@ -16,8 +16,8 @@ public interface ProviderProfileRepository extends JpaRepository<ProviderProfile
     Optional<ProviderProfileEntity> findByUserId(@Param("userId") UUID userId);
 
     @Modifying
-    @Query("UPDATE ProviderProfileEntity p SET p.status = 'inactive'")
-    void updateAllStatusInactive();
+    @Query("UPDATE ProviderProfileEntity p SET p.status = 'inactive' WHERE p.status <> 'emergency'")
+    void updateAllStatusInactiveExceptEmergency();
 
 
 }

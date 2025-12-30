@@ -15,7 +15,7 @@ public class ProviderStatusScheduler {
     @Scheduled(cron = "0 0 22 * * *", zone = "America/Lima")
     @Transactional
     public void deactivateProviders() {
-        providerProfileRepository.updateAllStatusInactive();
+        providerProfileRepository.updateAllStatusInactiveExceptEmergency();
     }
 
 }
