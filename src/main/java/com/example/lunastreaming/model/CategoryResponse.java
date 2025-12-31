@@ -15,4 +15,6 @@ public class CategoryResponse {
     private String status;
     private String description;
 
+    private Integer sortOrder;
+
 }

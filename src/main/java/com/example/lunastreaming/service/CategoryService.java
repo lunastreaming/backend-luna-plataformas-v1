@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,7 +23,8 @@ public class CategoryService {
     private final CategoryBuilder categoryBuilder;
 
     public List<CategoryResponse> findAll() {
-        List<CategoryEntity> categoryEntities = repository.findByStatusNot("removed");
+        List<CategoryEntity> categoryEntities = repository.findByStatusNotOrderBySortOrderAsc("removed");
+
         return categoryEntities.stream()
                 .map(categoryBuilder::categoryResponse)
                 .toList();
@@ -35,6 +38,13 @@ public class CategoryService {
     @Transactional
     public CategoryResponse save(CategoryRequest categoryRequest) {
         CategoryEntity categoryEntity = categoryBuilder.categoryRequest(categoryRequest);
+
+        // 1. Buscamos el último valor de orden, si no hay ninguno, empezamos en 1 (o 0)
+        int nextOrder = repository.findMaxSortOrder().orElse(0) + 1;
+
+        // 2. Seteamos el nuevo orden a la entidad
+        categoryEntity.setSortOrder(nextOrder);
+
         CategoryEntity entity = repository.save(categoryEntity);
         return categoryBuilder.categoryResponse(entity);
     }
@@ -73,6 +83,26 @@ public class CategoryService {
         return categoryBuilder.categoryResponse(saved);
     }
 
+    @Transactional
+    public void reorderCategories(List<Integer> orderedIds) {
+        // 1. Obtenemos todas las categorías involucradas de un solo golpe
+        List<CategoryEntity> categories = repository.findAllById(orderedIds);
 
+        // 2. Mapeamos para acceso rápido por ID
+        Map<Integer, CategoryEntity> categoryMap = categories.stream()
+                .collect(Collectors.toMap(CategoryEntity::getId, c -> c));
+
+        // 3. Asignamos el nuevo orden basado en la posición en la lista recibida
+        for (int i = 0; i < orderedIds.size(); i++) {
+            Integer id = orderedIds.get(i);
+            CategoryEntity entity = categoryMap.get(id);
+            if (entity != null) {
+                entity.setSortOrder(i + 1); // El orden empieza en 1
+            }
+        }
+
+        // 4. Guardamos todos los cambios en una sola transacción
+        repository.saveAll(categories);
+    }
 
 }

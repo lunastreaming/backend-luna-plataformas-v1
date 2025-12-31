@@ -7,6 +7,7 @@ import com.example.lunastreaming.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -78,4 +79,11 @@ public class CategoryController {
         ExchangeRate rate = exchangeRateService.getCurrentRate();
         return ResponseEntity.ok(rate);
     }
+
+    @PutMapping("/reorder")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reorder(@RequestBody List<Integer> orderedIds) {
+        service.reorderCategories(orderedIds);
+    }
+
 }

@@ -17,6 +17,7 @@ public class CategoryBuilder {
                 .imageUrl(categoryEntity.getImageUrl())
                 .status(categoryEntity.getStatus())
                 .description(categoryEntity.getDescription())
+                .sortOrder(categoryEntity.getSortOrder())
                 .build();
     }
 

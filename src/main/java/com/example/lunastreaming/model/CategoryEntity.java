@@ -26,4 +26,7 @@ public class CategoryEntity {
 
     private String description;
 
+    @Column(name = "sort_order")
+    private Integer sortOrder = 0;
+
 }
