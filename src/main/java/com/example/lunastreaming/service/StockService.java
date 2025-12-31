@@ -497,11 +497,19 @@ public class StockService {
     public PagedResponse<StockResponse> listProviderSales(Principal principal, String q, int page, int size, String sort) {
         UUID providerId = resolveUserIdFromPrincipal(principal);
 
+        UserEntity provider = userRepository.findById(providerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Provider not found"));
+
         Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
 
         Page<StockEntity> p = stockRepository.findSalesByProviderIdPaged(providerId, pageable);
 
-        Page<StockResponse> mapped = p.map(stockBuilder::toStockResponse);
+        Page<StockResponse> mapped = p.map(stock -> {
+            StockResponse res = stockBuilder.toStockResponse(stock);
+            res.setProviderName(provider.getUsername());
+            res.setProviderPhone(provider.getPhone());
+            return res;
+        });
         return toPagedResponse(mapped);
     }
 
