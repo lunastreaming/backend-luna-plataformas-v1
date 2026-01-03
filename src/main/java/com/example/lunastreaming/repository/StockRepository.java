@@ -134,6 +134,16 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
 
     Page<StockEntity> findByProductProviderId(UUID providerId, Pageable pageable);
 
+    @Query("SELECT s FROM StockEntity s WHERE s.product.provider.id = :providerId " +
+            "AND (:query IS NULL OR :query = '' OR " +
+            "LOWER(s.product.name) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
+            "LOWER(s.username) LIKE LOWER(CONCAT('%', :query, '%')))")
+    Page<StockEntity> findByProviderAndQuery(
+            @Param("providerId") UUID providerId,
+            @Param("query") String query,
+            Pageable pageable
+    );
+
     Page<StockEntity> findByStatusIn(List<String> statuses, Pageable pageable);
 
 

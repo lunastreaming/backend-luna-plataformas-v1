@@ -44,22 +44,22 @@ public class StockService {
     private final SupportTicketRepository supportTicketRepository;
 
 
-    public Page<StockResponse> getByProviderPrincipal(String principalName, int page, int size) {
+    public Page<StockResponse> getByProviderPrincipal(String principalName, int page, int size, String searchTerm) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        UUID providerId;
 
         try {
-            UUID providerId = UUID.fromString(principalName);
-            Page<StockEntity> byProductProviderId = stockRepository.findByProductProviderId(providerId, pageable);
-            return byProductProviderId.map(stockBuilder::toStockResponse);
+            providerId = UUID.fromString(principalName);
         } catch (IllegalArgumentException ex) {
-            UUID providerId = userRepository.findByUsername(principalName)
+            providerId = userRepository.findByUsername(principalName)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN))
                     .getId();
-            Page<StockEntity> byProductProviderId = stockRepository.findByProductProviderId(providerId, pageable);
-            return byProductProviderId.map(stockBuilder::toStockResponse);
         }
-    }
 
+        // Llamada al nuevo método con el filtro de búsqueda
+        Page<StockEntity> result = stockRepository.findByProviderAndQuery(providerId, searchTerm, pageable);
+        return result.map(stockBuilder::toStockResponse);
+    }
 
     @Transactional
     public StockResponse createStock(StockResponse stock, UUID productId, Principal principal) {

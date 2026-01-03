@@ -25,10 +25,11 @@ public class StockController {
     public ResponseEntity<Page<StockResponse>> getMine(
             Principal principal,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search // Nuevo parámetro
     ) {
         String principalName = principal.getName();
-        Page<StockResponse> list = stockService.getByProviderPrincipal(principalName, page, size);
+        Page<StockResponse> list = stockService.getByProviderPrincipal(principalName, page, size, search);
         return ResponseEntity.ok(list);
     }
 
