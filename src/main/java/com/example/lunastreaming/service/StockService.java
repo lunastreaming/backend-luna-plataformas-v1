@@ -502,7 +502,7 @@ public class StockService {
 
         Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
 
-        Page<StockEntity> p = stockRepository.findSalesByProviderIdPaged(providerId, pageable);
+        Page<StockEntity> p = stockRepository.findSalesByProviderIdPaged(providerId, q, pageable);
 
         Page<StockResponse> mapped = p.map(stock -> {
             StockResponse res = stockBuilder.toStockResponse(stock);

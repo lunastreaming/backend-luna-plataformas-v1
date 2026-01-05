@@ -46,10 +46,12 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
   LEFT JOIN s.buyer b
   WHERE p.providerId = :providerId
     AND s.status = 'sold'
-  ORDER BY s.soldAt DESC
+    AND (:q IS NULL OR LOWER(s.username) LIKE LOWER(CONCAT('%', :q, '%')) 
+        OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')))
 """)
     Page<StockEntity> findSalesByProviderIdPaged(
             @Param("providerId") UUID providerId,
+            @Param("q") String q, // Añadir parámetro de búsqueda
             Pageable pageable
     );
 
