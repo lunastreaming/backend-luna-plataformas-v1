@@ -16,11 +16,12 @@ import java.math.BigDecimal;
 @Builder
 public class SettingRequest {
 
-    @NotNull(message = "valueNum es requerido")
     @DecimalMin(value = "0", message = "valueNum debe ser >= 0")
-    // Ajusta Digits según la precisión que quieras permitir (ej: 19,6 -> 19 enteros y 6 decimales)
     @Digits(integer = 19, fraction = 2, message = "Formato de valueNum inválido")
     private BigDecimal number;
+
+    // Añadimos el campo para el Switch
+    private Boolean valueBool;
 
     // opcional: campo adicional para comentarios o descripción del cambio
     private String comment;

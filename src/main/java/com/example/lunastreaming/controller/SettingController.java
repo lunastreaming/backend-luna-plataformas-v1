@@ -25,9 +25,11 @@ public class SettingController {
 
     @PatchMapping("/{key}")
     public ResponseEntity<SettingResponse> patch(@PathVariable String key,
-                                                 @RequestBody SettingRequest request, Principal principal) {
+                                                 @RequestBody SettingRequest request,
+                                                 Principal principal) {
         UUID adminId = UUID.fromString(principal.getName());
-        SettingResponse settingResponse = settingService.updateNumber(key, request.getNumber(), adminId);
+        // Pasamos el request completo
+        SettingResponse settingResponse = settingService.updateSetting(key, request, adminId);
         return ResponseEntity.ok(settingResponse);
     }
 

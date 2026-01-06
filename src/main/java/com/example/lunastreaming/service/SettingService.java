@@ -2,8 +2,10 @@ package com.example.lunastreaming.service;
 
 import com.example.lunastreaming.builder.SettingBuilder;
 import com.example.lunastreaming.model.SettingEntity;
+import com.example.lunastreaming.model.SettingRequest;
 import com.example.lunastreaming.model.SettingResponse;
 import com.example.lunastreaming.repository.SettingRepository;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -41,23 +43,31 @@ public class SettingService {
 
 
     @Transactional
-    public SettingResponse updateNumber(String key, BigDecimal value, UUID adminId) {
-        SettingEntity s = settingRepository.findByKeyIgnoreCase(key).orElseGet(() -> {
-            SettingEntity newS = new SettingEntity();
-            newS.setKey(key);
-            newS.setType("number");
-            newS.setValueNum(value);
-            newS.setUpdatedAt(Instant.now());
-            return newS;
-        });
-        if (!"number".equalsIgnoreCase(s.getType())) {
-            throw new IllegalArgumentException("Setting " + key + " is not numeric");
+    public SettingResponse updateSetting(String key, SettingRequest request, UUID adminId) {
+        SettingEntity s = settingRepository.findByKeyIgnoreCase(key)
+                .orElseThrow(() -> new EntityNotFoundException("Setting " + key + " not found"));
+
+        // Lógica dinámica según el tipo de configuración
+        if ("boolean".equalsIgnoreCase(s.getType())) {
+            if (request.getValueBool() == null) {
+                throw new IllegalArgumentException("Setting " + key + " requires a boolean value");
+            }
+            s.setValueBool(request.getValueBool());
+        } else if ("number".equalsIgnoreCase(s.getType())) {
+            if (request.getNumber() == null) {
+                throw new IllegalArgumentException("Setting " + key + " is numeric and requires valueNum");
+            }
+            s.setValueNum(request.getNumber());
+        } else {
+            throw new IllegalArgumentException("Unsupported setting type: " + s.getType());
         }
-        s.setValueNum(value);
+
         s.setUpdatedAt(Instant.now());
-        // set updatedBy from adminId lookup if required
+        // Opcional: buscar el admin y asignarlo a s.setUpdatedBy(...)
+
         SettingEntity saved = settingRepository.save(s);
         cache.put(key.toLowerCase(Locale.ROOT), saved);
+
         return settingBuilder.toSettingResponse(saved);
     }
 

@@ -2,10 +2,7 @@ package com.example.lunastreaming.service;
 
 import com.example.lunastreaming.builder.UserMapper;
 import com.example.lunastreaming.model.*;
-import com.example.lunastreaming.repository.ProviderProfileRepository;
-import com.example.lunastreaming.repository.SellerProfileRepository;
-import com.example.lunastreaming.repository.TokenBlacklistRepository;
-import com.example.lunastreaming.repository.UserRepository;
+import com.example.lunastreaming.repository.*;
 import com.example.lunastreaming.security.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
@@ -38,6 +35,7 @@ public class UserService {
     private final TokenBlacklistRepository tokenBlacklistRepository;
     private final ProviderProfileRepository providerProfileRepository;
     private final SellerProfileRepository sellerProfileRepository;
+    private final SettingRepository settingRepository;
 
     private final int DEFAULT_LIMIT = 25;
     private final int MAX_LIMIT = 100;
@@ -53,6 +51,16 @@ public class UserService {
         if (req.phone != null && userRepository.findByPhone(req.phone).isPresent()) {
             throw new IllegalArgumentException("phone_taken");
         }
+        boolean autoActivateSellers = settingRepository.findByKeyIgnoreCase("auto_activate_sellers")
+                .map(setting -> Boolean.TRUE.equals(setting.getValueBool()))
+                .orElse(false);
+
+        // 2. Lógica de estado inicial
+        String initialStatus = "inactive";
+        if ("seller".equalsIgnoreCase(req.role) && autoActivateSellers) {
+            initialStatus = "active";
+        }
+
 
         UserEntity userEntity = UserEntity
                 .builder()
@@ -62,7 +70,7 @@ public class UserService {
                 .passwordHash(passwordEncoder.encode(req.password))
                 .passwordAlgo("argon2id")
                 .referrerCode(req.referrerCode)
-                .status("inactive")
+                .status(initialStatus)
                 .build();
 
         // save user first to obtain id

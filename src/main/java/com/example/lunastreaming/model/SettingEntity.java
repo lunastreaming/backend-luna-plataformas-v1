@@ -16,10 +16,11 @@ import java.time.Instant;
 public class SettingEntity {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    // "key" es palabra reservada en muchos SQL, mejor ser explícitos
+    @Column(name = "key", nullable = false, unique = true)
     private String key;
 
     @Column(name = "value_text")
@@ -32,14 +33,16 @@ public class SettingEntity {
     private Boolean valueBool;
 
     @Column(nullable = false)
-    private String type; // "number","string","boolean"
+    @Builder.Default
+    private String type = "string"; // 'number' | 'string' | 'boolean'
 
     private String description;
 
-    private Instant updatedAt;
+    @Column(name = "updated_at")
+    @Builder.Default
+    private Instant updatedAt = Instant.now();
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY) // Lazy es mejor práctica para rendimiento
     @JoinColumn(name="updated_by")
     private UserEntity updatedBy;
-
 }
