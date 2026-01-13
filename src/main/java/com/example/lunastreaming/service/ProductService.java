@@ -178,7 +178,7 @@ public class ProductService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto no encontrado"));
 
         // Asumiendo que tu product tiene un campo ownerUsername (String) o relación user
-        String owner = product.getProviderId().toString(); // o product.getUser().getUsername();
+        String owner = product.getProviderId().toString();
 
         if (owner == null || !owner.equals(username)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes permiso para eliminar este producto");
@@ -188,7 +188,8 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductEntity publishProduct(UUID productId, Principal principal) {
+    public ProductResponse publishProduct(UUID productId, Principal principal) {
+        // 1. Validaciones de seguridad iniciales
         if (principal == null || principal.getName() == null) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Usuario no autenticado");
         }
@@ -202,64 +203,54 @@ public class ProductService {
             throw new AccessDeniedException("No autorizado para publicar este producto");
         }
 
+        // 2. Lógica de Cobro (Wallet)
         BigDecimal publishPrice = settingRepository.findValueNumByKey("supplierPublication")
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "supplierPublication no configurado"));
 
         UserEntity user = userRepository.findById(callerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
 
+        // --- Conversión robusta de Balance ---
         BigDecimal balance;
         Object rawBalance = user.getBalance();
+        if (rawBalance == null) balance = BigDecimal.ZERO;
+        else if (rawBalance instanceof BigDecimal) balance = (BigDecimal) rawBalance;
+        else if (rawBalance instanceof Double) balance = BigDecimal.valueOf((Double) rawBalance);
+        else if (rawBalance instanceof String) balance = new BigDecimal((String) rawBalance);
+        else balance = new BigDecimal(rawBalance.toString());
 
-        if (rawBalance == null) {
-            balance = BigDecimal.ZERO;
-        } else if (rawBalance instanceof BigDecimal) {
-            balance = (BigDecimal) rawBalance;
-        } else if (rawBalance instanceof Double) {
-            balance = BigDecimal.valueOf((Double) rawBalance);
-        } else if (rawBalance instanceof String) {
-            balance = new BigDecimal((String) rawBalance);
-        } else {
-            balance = new BigDecimal(rawBalance.toString());
-        }
-
+        // --- Conversión robusta de Precio ---
         BigDecimal price;
-        if (publishPrice == null) {
-            price = BigDecimal.ZERO;
-        } else if (publishPrice instanceof BigDecimal) {
-            price = (BigDecimal) publishPrice;
-        } else if (publishPrice instanceof Number) {
-            price = BigDecimal.valueOf(((Number) publishPrice).doubleValue());
-        } else {
-            price = new BigDecimal(publishPrice.toString());
-        }
+        if (publishPrice == null) price = BigDecimal.ZERO;
+        else if (publishPrice instanceof BigDecimal) price = (BigDecimal) publishPrice;
+        else if (publishPrice instanceof Number) price = BigDecimal.valueOf(((Number) publishPrice).doubleValue());
+        else price = new BigDecimal(publishPrice.toString());
 
         if (balance.compareTo(price) < 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Saldo insuficiente para publicar el producto");
         }
 
+        // Actualizar saldo
         BigDecimal newBalance = balance.subtract(price).setScale(2, RoundingMode.HALF_UP);
         user.setBalance(newBalance);
         userRepository.save(user);
 
-        // Registrar transacción en wallet_transactions
+        // 3. Registro de Transacción
         WalletTransaction tx = WalletTransaction.builder()
                 .user(user)
                 .type("publish")
-                .amount(price.negate()) // monto negativo para reflejar salida
+                .amount(price.negate())
                 .currency("USD")
                 .exchangeApplied(false)
-                .exchangeRate(null)
                 .status("approved")
                 .createdAt(Instant.now())
                 .approvedAt(Instant.now())
                 .approvedBy(user)
                 .description("Publicación de producto: " + product.getName())
                 .build();
-
         walletTransactionRepository.save(tx);
 
-        // Fechas de publicación
+        // 4. Actualización de Fechas y Estado del Producto
         LocalDate today = LocalDate.now(ZoneId.systemDefault());
         LocalDate end = today.plusDays(30);
         long daysRemaining = ChronoUnit.DAYS.between(today, end);
@@ -269,7 +260,26 @@ public class ProductService {
         product.setPublishEnd(Timestamp.valueOf(end.atStartOfDay()));
         product.setDaysRemaining((int) Math.max(0, daysRemaining));
 
-        return productRepository.save(product);
+        // Guardar producto actualizado
+        ProductEntity savedProduct = productRepository.save(product);
+
+        // 5. NUEVO: Mapeo a ProductResponse (Copiado de tu primer método)
+
+        // Obtener stocks asociados
+        List<StockEntity> stocks = stockRepository.findByProductId(productId);
+
+        // Mapear stocks a DTOs usando tu stockBuilder
+        List<StockResponse> stockResponses = new ArrayList<>();
+        for (StockEntity x : stocks) {
+            StockResponse stockResponse = stockBuilder.toStockResponse(x);
+            stockResponses.add(stockResponse);
+        }
+
+        // 6. Retornar el DTO final
+        return ProductResponse.builder()
+                .product(productBuilder.productDtoFromEntity(savedProduct, null, null, null))
+                .stockResponses(stockResponses)
+                .build();
     }
 
     private UUID resolveUserIdFromPrincipal(Principal principal) {
@@ -490,7 +500,8 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductEntity renewProduct(UUID productId, Principal principal) {
+    public ProductResponse renewProduct(UUID productId, Principal principal) {
+        // 1. Validaciones de seguridad
         if (principal == null || principal.getName() == null) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Usuario no autenticado");
         }
@@ -503,14 +514,14 @@ public class ProductService {
             throw new AccessDeniedException("No autorizado para renovar este producto");
         }
 
-        // Obtener precio de publicación
+        // 2. Obtener precio y validar saldo
         BigDecimal publishPrice = settingRepository.findValueNumByKey("supplierPublication")
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "supplierPublication no configurado"));
 
         UserEntity user = userRepository.findById(callerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
 
-        // Normalizar balance a BigDecimal (igual que en publishProduct)
+        // Usando el método auxiliar toBigDecimal que ya tienes en tu clase
         BigDecimal balance = toBigDecimal(user.getBalance());
         BigDecimal price = toBigDecimal(publishPrice);
 
@@ -518,19 +529,17 @@ public class ProductService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Saldo insuficiente para renovar el producto");
         }
 
-        // Descontar saldo y guardar usuario
+        // 3. Descontar saldo y registrar transacción
         BigDecimal newBalance = balance.subtract(price).setScale(2, RoundingMode.HALF_UP);
         user.setBalance(newBalance);
         userRepository.save(user);
 
-        // Registrar transacción en wallet_transactions
         WalletTransaction tx = WalletTransaction.builder()
                 .user(user)
-                .type("publish") // o "renew" si prefieres distinguir
+                .type("publish")
                 .amount(price.negate())
                 .currency("USD")
                 .exchangeApplied(false)
-                .exchangeRate(null)
                 .status("approved")
                 .createdAt(Instant.now())
                 .approvedAt(Instant.now())
@@ -539,20 +548,20 @@ public class ProductService {
                 .build();
         walletTransactionRepository.save(tx);
 
-        // Lógica de fechas
+        // 4. Lógica de cálculo de fechas (Renovación)
         LocalDate today = LocalDate.now(ZoneId.systemDefault());
         LocalDate newEnd;
         LocalDate currentEnd = null;
+
         if (product.getPublishEnd() != null) {
             currentEnd = product.getPublishEnd().toLocalDateTime().toLocalDate();
         }
 
         if (product.getActive() != null && product.getActive() && currentEnd != null && currentEnd.isAfter(today)) {
-            // Producto activo: sumar 30 días a publishEnd actual
+            // Si está vigente, sumamos 30 días al final actual
             newEnd = currentEnd.plusDays(30);
-            // publishStart se mantiene (no la cambiamos)
         } else {
-            // Producto vencido o inactivo: activar desde hoy por 30 días
+            // Si está vencido, empezamos de nuevo desde hoy
             newEnd = today.plusDays(30);
             product.setPublishStart(Timestamp.valueOf(today.atStartOfDay()));
             product.setActive(true);
@@ -562,7 +571,25 @@ public class ProductService {
         long daysRemaining = ChronoUnit.DAYS.between(today, newEnd);
         product.setDaysRemaining((int) Math.max(0, daysRemaining));
 
-        return productRepository.save(product);
+        // 5. Persistencia del producto actualizado
+        ProductEntity updatedProduct = productRepository.save(product);
+
+        // 6. TRANSFORMACIÓN A PRODUCTRESPONSE (Igual que en los otros métodos)
+
+        // Obtener stocks actuales
+        List<StockEntity> stocks = stockRepository.findByProductId(productId);
+
+        // Mapear stocks a DTOs
+        List<StockResponse> stockResponses = new ArrayList<>();
+        for (StockEntity x : stocks) {
+            stockResponses.add(stockBuilder.toStockResponse(x));
+        }
+
+        // Retornar la respuesta construida con tus builders
+        return ProductResponse.builder()
+                .product(productBuilder.productDtoFromEntity(updatedProduct, null, null, null))
+                .stockResponses(stockResponses)
+                .build();
     }
 
     // Helper para convertir a BigDecimal (puedes moverlo a util)

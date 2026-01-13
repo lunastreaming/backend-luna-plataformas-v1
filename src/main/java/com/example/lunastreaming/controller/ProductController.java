@@ -64,15 +64,17 @@ public class ProductController {
     }
 
     @PatchMapping("/{id}/publish")
-    public ResponseEntity<ProductEntity> publishProduct(@PathVariable UUID id, Principal principal) {
-        ProductEntity updated = productService.publishProduct(id, principal);
-        return ResponseEntity.ok(updated);
+    public ResponseEntity<ProductResponse> publishProduct(@PathVariable UUID id, Principal principal) {
+        // Cambiamos el tipo de 'ProductEntity' a 'ProductResponse'
+        ProductResponse response = productService.publishProduct(id, principal);
+        return ResponseEntity.ok(response);
     }
 
     @PatchMapping("/{id}/publish/renew")
-    public ResponseEntity<ProductEntity> renewProduct(@PathVariable UUID id, Principal principal) {
-        ProductEntity updated = productService.renewProduct(id, principal);
-        return ResponseEntity.ok(updated);
+    public ResponseEntity<ProductResponse> renewProduct(@PathVariable UUID id, Principal principal) {
+        // Cambiamos el tipo de 'ProductEntity' a 'ProductResponse'
+        ProductResponse response = productService.renewProduct(id, principal);
+        return ResponseEntity.ok(response);
     }
 
 }
