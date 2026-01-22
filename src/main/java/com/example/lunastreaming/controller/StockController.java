@@ -4,9 +4,11 @@ import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.service.StockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
 import java.util.List;
@@ -198,6 +200,7 @@ public class StockController {
         return ResponseEntity.noContent().build(); // 👈 devuelve 204 sin body
     }
 
+    //Cambio del celular del cliente
     @PatchMapping("/{id}/client-phone")
     @PreAuthorize("hasRole('seller')")
     public ResponseEntity<Void> updatePhone(
@@ -206,6 +209,25 @@ public class StockController {
 
         String newPhone = body.get("clientPhone");
         stockService.updateClientPhone(id, newPhone);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    //Cambio del nombre del cliente
+    @PatchMapping("/{id}/client-name")
+    @PreAuthorize("hasRole('seller')")
+    public ResponseEntity<Void> updateClientName(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+
+        String newName = body.get("clientName");
+
+        // Opcional: Validación simple de que el nombre no venga vacío
+        if (newName == null || newName.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre no puede estar vacío");
+        }
+
+        stockService.updateClientName(id, newName);
 
         return ResponseEntity.noContent().build();
     }

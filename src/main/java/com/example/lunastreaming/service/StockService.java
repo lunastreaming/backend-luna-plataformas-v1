@@ -1041,4 +1041,13 @@ public class StockService {
         stockRepository.save(stock);
     }
 
+    @Transactional
+    public void updateClientName(Long id, String newName) {
+        StockEntity stock = stockRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Stock no encontrado"));
+
+        stock.setClientName(newName);
+        stockRepository.save(stock);
+    }
+
 }
