@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.security.Principal;
 import java.time.Duration;
 import java.time.Instant;
@@ -36,6 +37,7 @@ public class UserService {
     private final ProviderProfileRepository providerProfileRepository;
     private final SellerProfileRepository sellerProfileRepository;
     private final SettingRepository settingRepository;
+    private final WalletTransactionRepository walletTransactionRepository;
 
     private final int DEFAULT_LIMIT = 25;
     private final int MAX_LIMIT = 100;
@@ -433,5 +435,50 @@ public class UserService {
         // 4. Actualizar
         target.setPhone(request.getNewPhone());
         userRepository.save(target);
+    }
+
+    @Transactional
+    public void selfChangePhone(String userIdentifier, UpdatePhoneRequest request) {
+        // 1. Buscar al usuario (el que ejecuta la acción)
+        UserEntity user = userRepository.findById(UUID.fromString(userIdentifier))
+                .orElseThrow(() -> new IllegalArgumentException("user_not_found"));
+
+        // 2. Validar disponibilidad del nuevo teléfono
+        if (userRepository.existsByPhone(request.getNewPhone())) {
+            throw new IllegalArgumentException("phone_already_exists");
+        }
+
+        // 3. Obtener el costo del cambio desde la configuración
+        SettingEntity costSetting = settingRepository.findByKeyIgnoreCase("cost_change_phone")
+                .orElseThrow(() -> new IllegalStateException("cost_setting_not_found"));
+
+        BigDecimal cost = costSetting.getValueNum();
+
+        // 4. Verificar si el usuario tiene saldo suficiente
+        // Asumiendo que userEntity tiene un campo 'balance'
+        if (user.getBalance().compareTo(cost) < 0) {
+            throw new IllegalStateException("insufficient_balance");
+        }
+
+        // 5. Aplicar el descuento y actualizar teléfono
+        user.setBalance(user.getBalance().subtract(cost));
+        user.setPhone(request.getNewPhone());
+        userRepository.save(user);
+
+        // 6. Registrar el movimiento (WalletTransaction)
+        WalletTransaction tx = WalletTransaction.builder()
+                .user(user)
+                .type("phone_change") // Tipo descriptivo
+                .amount(cost.negate()) // El monto se guarda en negativo por ser un egreso
+                .currency("USD")
+                .exchangeApplied(false)
+                .status("approved")
+                .createdAt(Instant.now())
+                .approvedAt(Instant.now())
+                .approvedBy(user)
+                .description("Cambio de número de teléfono")
+                .build();
+
+        walletTransactionRepository.save(tx);
     }
 }

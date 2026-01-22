@@ -4,6 +4,7 @@ package com.example.lunastreaming.controller;
 import com.example.lunastreaming.model.*;
 import com.example.lunastreaming.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -85,6 +86,16 @@ public class UserController {
     @DeleteMapping("/delete/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable("id") UUID id, Principal principal) {
         userService.deleteUser(id, principal);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/me/phone")
+    public ResponseEntity<Void> selfChangePhone(
+            @Valid @RequestBody UpdatePhoneRequest req,
+            Principal principal
+    ) {
+        // Usamos el nombre del principal (username/id) para identificar al usuario
+        userService.selfChangePhone(principal.getName(), req);
         return ResponseEntity.noContent().build();
     }
 
