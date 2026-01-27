@@ -258,26 +258,31 @@ public class WalletService {
 
 
 
-    public Page<WalletTransactionResponse> listAllTransactionsForAdmin(Principal principal, int page) {
-        UUID adminId = resolveUserIdFromPrincipal(principal);
-
+    public Page<WalletTransactionResponse> listAllTransactionsForAdmin(Principal principal, int page, String search) {
+        // 1. Validar identidad del administrador
+        UUID adminId = UUID.fromString(principal.getName());
         UserEntity admin = userRepository.findById(adminId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin no encontrado"));
 
         if (!isAdmin(admin)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Acceso restringido a administradores");
         }
 
-        // Ordenar por fecha descendente (más reciente primero).
-        // Ajusta "createdAt" si tu entidad usa otro nombre (por ejemplo "date" o "timestamp").
+        // 2. Configurar paginación y orden (Más recientes primero)
         Sort sort = Sort.by(Sort.Direction.DESC, "createdAt");
         Pageable pageable = PageRequest.of(Math.max(0, page), PAGE_SIZE, sort);
 
-        // Tipos permitidos: recharge y withdrawal
-        List<String> allowedTypes = Arrays.asList("recharge", "withdrawal", "chargeback", "transfer", "publish");
+        // 3. Filtros predefinidos
+        List<String> allowedTypes = Arrays.asList("recharge", "withdrawal", "chargeback", "transfer", "publish", "phone_change");
+        String excludedStatus = "cancelled";
 
-        // Excluir transacciones con status = 'cancelled' y filtrar por tipo
-        Page<WalletTransaction> pageTx = walletTransactionRepository.findByTypeInAndStatusNot(allowedTypes, "cancelled", pageable);
+        // 4. Consulta al repositorio (Búsqueda en ambas columnas)
+        Page<WalletTransaction> pageTx = walletTransactionRepository.findAdminTransactions(
+                search,
+                allowedTypes,
+                excludedStatus,
+                pageable
+        );
 
         return pageTx.map(this::toResponse);
     }

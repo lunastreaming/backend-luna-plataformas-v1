@@ -95,12 +95,12 @@ public class WalletController {
     @GetMapping("/transactions")
     public ResponseEntity<Page<WalletTransactionResponse>> listTransactions(
             Principal principal,
-            @RequestParam(name = "page", defaultValue = "0") int page
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "search", required = false) String search
     ) {
-        Page<WalletTransactionResponse> result = walletService.listAllTransactionsForAdmin(principal, page);
+        Page<WalletTransactionResponse> result = walletService.listAllTransactionsForAdmin(principal, page, search);
         return ResponseEntity.ok(result);
     }
-
 
     //retiros de proveedores
 

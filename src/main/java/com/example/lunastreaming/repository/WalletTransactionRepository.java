@@ -49,5 +49,18 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
 
     Page<WalletTransaction> findByTypeIn(List<String> types, Pageable pageable);
 
+    @Query("SELECT t FROM WalletTransaction t JOIN FETCH t.user u " +
+            "WHERE t.status <> :excludedStatus " +
+            "AND t.type IN :allowedTypes " +
+            "AND (:search IS NULL OR " +
+            "     LOWER(CAST(u.username AS string)) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+            "     LOWER(CAST(t.type AS string)) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))" +
+            ")")
+    Page<WalletTransaction> findAdminTransactions(
+            @Param("search") String search,
+            @Param("allowedTypes") List<String> allowedTypes,
+            @Param("excludedStatus") String excludedStatus,
+            Pageable pageable
+    );
 
 }
