@@ -3,6 +3,7 @@ package com.example.lunastreaming.service;
 
 import com.example.lunastreaming.builder.WalletBuilder;
 import com.example.lunastreaming.model.*;
+import com.example.lunastreaming.repository.SettingRepository;
 import com.example.lunastreaming.util.LunaException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -41,6 +42,8 @@ public class WalletService {
     private final WalletBuilder walletBuilder;
 
     private final SettingService settingService;
+
+    private final SettingRepository settingRepository;
 
     private static final int PAGE_SIZE = 100;
 
@@ -180,8 +183,13 @@ public class WalletService {
         List<WalletTransaction> pendings = walletTransactionRepository
                 .findByStatusAndUserRoleAndTypes("pending", role, types);
 
+        // Obtenemos el valor numérico directamente
+        BigDecimal discountFactor = settingRepository.findByKeyIgnoreCase("supplierDiscount")
+                .map(SettingEntity::getValueNum)
+                .orElse(BigDecimal.ZERO);
+
         return pendings.stream()
-                .map(walletBuilder::builderToWalletResponse)
+                .map(tx -> walletBuilder.builderToWalletSupResponse(tx, discountFactor))
                 .toList();
     }
 

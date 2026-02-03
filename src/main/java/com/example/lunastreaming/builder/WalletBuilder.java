@@ -44,4 +44,45 @@ public class WalletBuilder {
                 .build();
     }
 
+    public WalletResponse builderToWalletSupResponse(WalletTransaction walletTransaction, BigDecimal discountFactor) {
+
+        ExchangeRate rate = exchangeRateRepository.findFirstByOrderByCreatedAtDesc()
+                .orElseThrow(() -> new RuntimeException("No se encontraron tasas de cambio"));
+
+        BigDecimal amountToProcess = walletTransaction.getAmount();
+
+        // Aplicar descuento solo si es retiro y el factor es mayor a 0
+        if ("withdrawal".equalsIgnoreCase(walletTransaction.getType()) && discountFactor.compareTo(BigDecimal.ZERO) > 0) {
+
+            // Si discountFactor es 0.1, el multiplicador es 0.9 (1 - 0.1)
+            BigDecimal multiplier = BigDecimal.ONE.subtract(discountFactor);
+
+            // 400 * 0.9 = 360.00
+            amountToProcess = amountToProcess.multiply(multiplier);
+        }
+
+        // Redondeamos el monto procesado a 2 decimales
+        BigDecimal finalAmount = amountToProcess.setScale(2, RoundingMode.HALF_UP);
+
+        // Cálculo de Soles (Monto Final * Tasa)
+        BigDecimal amountSoles = finalAmount.multiply(rate.getRate())
+                .setScale(2, RoundingMode.HALF_UP);
+
+        return WalletResponse.builder()
+                .id(walletTransaction.getId())
+                .user(walletTransaction.getUser().getUsername())
+                .type(walletTransaction.getType())
+                .amount(finalAmount)
+                .amountSoles(amountSoles)
+                .currency(walletTransaction.getCurrency())
+                .exchangeApplied(walletTransaction.getExchangeApplied())
+                .exchangeRate(walletTransaction.getExchangeRate())
+                .status(walletTransaction.getStatus())
+                .createdAt(walletTransaction.getCreatedAt())
+                .approvedAt(walletTransaction.getApprovedAt())
+                .description(walletTransaction.getDescription())
+                .realAmount(walletTransaction.getRealAmount())
+                .build();
+    }
+
 }
