@@ -78,6 +78,9 @@ public class ProductEntity {
     @Column(name = "days_remaining")
     private Integer daysRemaining;
 
+    @Column(name = "deleted", nullable = false)
+    private Boolean deleted = false;
+
 
     @PreUpdate
     public void preUpdate() {

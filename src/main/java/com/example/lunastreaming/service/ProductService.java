@@ -57,13 +57,14 @@ public class ProductService {
         product.setActive(Boolean.FALSE);
         product.setCreatedAt(Instant.now());
         product.setUpdatedAt(Instant.now());
+        product.setDeleted(Boolean.FALSE);
         return productRepository.save(product);
     }
 
     @Transactional(readOnly = true)
     public List<ProductResponse> getAllByProviderWithStocks(UUID providerId) {
         // 1) Obtener productos del proveedor
-        List<ProductEntity> products = productRepository.findByProviderId(providerId);
+        List<ProductEntity> products = productRepository.findByProviderIdAndDeletedFalse(providerId);
         if (products.isEmpty()) {
             return Collections.emptyList();
         }
@@ -177,14 +178,13 @@ public class ProductService {
         ProductEntity product = productRepository.findById(productId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto no encontrado"));
 
-        // Asumiendo que tu product tiene un campo ownerUsername (String) o relación user
-        String owner = product.getProviderId().toString();
-
-        if (owner == null || !owner.equals(username)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes permiso para eliminar este producto");
+        if (!product.getProviderId().toString().equals(username)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes permiso");
         }
 
-        productRepository.delete(product);
+        product.setDeleted(true); // El usuario ya no lo verá
+        product.setActive(false);  // También lo desactivamos de la venta pública
+        productRepository.save(product);
     }
 
     @Transactional

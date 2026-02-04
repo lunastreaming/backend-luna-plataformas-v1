@@ -15,7 +15,8 @@ import java.util.UUID;
 
 public interface ProductRepository extends JpaRepository<ProductEntity, UUID>, JpaSpecificationExecutor<ProductEntity> {
 
-    List<ProductEntity> findByProviderId(UUID providerId);
+    //Trae los productos no eliminados
+    List<ProductEntity> findByProviderIdAndDeletedFalse(UUID providerId);
 
     // todos los activos
     Page<ProductEntity> findByActiveTrue(Pageable pageable);
