@@ -48,9 +48,11 @@ public class StockBuilder {
         BigDecimal refund = ZERO;
 
         if (stockEntity.getEndAt() != null) {
+            Integer totalContractedDays = computeDaysBetween(stockEntity.getStartAt(), stockEntity.getEndAt(), true);
             BigDecimal productPrice = stockEntity.getPurchasePrice() != null ? stockEntity.getPurchasePrice() : null;
             Integer productDays = stockEntity.getProduct() != null ? stockEntity.getProduct().getDays() : null;
-            refund = computeRefund(productPrice, productPrice, productDays, stockEntity.getEndAt(), BigDecimal.ZERO, stockEntity.getStartAt());
+            refund = computeRefund(productPrice, productPrice, totalContractedDays
+                    , stockEntity.getEndAt(), BigDecimal.ZERO, stockEntity.getStartAt());
         }
 
         // calcular daysRemaining y daysPublished
@@ -123,31 +125,44 @@ public class StockBuilder {
     public BigDecimal computeRefund(
             final BigDecimal paidAmount,
             final BigDecimal productPrice,
-            final Integer productDays,
+            final Integer totalContractedDays, // 👈 Este es el divisor dinámico que calculamos fuera
             final Instant endAt,
             final BigDecimal feePercent,
-            final Instant startAt // 👈 necesitas también la fecha de inicio
+            final Instant startAt
     ) {
+        // 1. Determinar el precio base
         BigDecimal price = paidAmount != null ? paidAmount : productPrice;
-        if (price == null || productDays == null || productDays <= 0 || endAt == null) return ZERO;
 
-        // 👇 lógica adicional: si la compra fue hoy y la consulta es hoy
+        // 2. Validaciones de seguridad
+        // Usamos totalContractedDays para la validación porque es nuestra nueva base
+        if (price == null || totalContractedDays == null || totalContractedDays <= 0 || endAt == null) {
+            return BigDecimal.ZERO;
+        }
+
+        // 3. Lógica de "Devolución total el mismo día"
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         LocalDate startDate = startAt != null ? startAt.atZone(ZoneOffset.UTC).toLocalDate() : null;
         if (startDate != null && startDate.equals(today)) {
-            // devolver el precio completo
             return price.setScale(2, RoundingMode.HALF_UP);
         }
 
+        // 4. Calcular tiempo restante
         long secondsRemaining = ChronoUnit.SECONDS.between(Instant.now(), endAt);
-        if (secondsRemaining <= 0) return ZERO;
+        if (secondsRemaining <= 0) return BigDecimal.ZERO;
 
+        // Convertimos segundos restantes a decimal (ej: 190.5 días)
         BigDecimal daysRemaining = BigDecimal.valueOf(secondsRemaining)
                 .divide(BigDecimal.valueOf(SECONDS_PER_DAY), 8, RoundingMode.HALF_UP);
 
-        BigDecimal refund = price.multiply(daysRemaining)
-                .divide(BigDecimal.valueOf(productDays), 8, RoundingMode.HALF_UP);
+        // 5. CÁLCULO CRÍTICO:
+        // Evitamos que daysRemaining sea mayor que totalContractedDays por temas de milisegundos
+        BigDecimal effectiveDaysRemaining = daysRemaining.min(BigDecimal.valueOf(totalContractedDays));
 
+        // Refund = Precio * (Días Restantes / Días Totales del Contrato)
+        BigDecimal refund = price.multiply(effectiveDaysRemaining)
+                .divide(BigDecimal.valueOf(totalContractedDays), 8, RoundingMode.HALF_UP);
+
+        // 6. Aplicar comisión si existe
         if (feePercent != null && feePercent.compareTo(BigDecimal.ZERO) > 0) {
             refund = refund.multiply(BigDecimal.ONE.subtract(feePercent));
         }
