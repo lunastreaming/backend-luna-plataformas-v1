@@ -481,4 +481,49 @@ public class UserService {
 
         walletTransactionRepository.save(tx);
     }
+
+    @Transactional
+    public void selfChangePassword(String userIdentifier, SelfChangePasswordRequest request) {
+        // 1. Buscar al usuario
+        UserEntity user = userRepository.findById(UUID.fromString(userIdentifier))
+                .orElseThrow(() -> new IllegalArgumentException("user_not_found"));
+
+        // 2. Validar contraseña actual (Seguridad extra)
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("invalid_current_password");
+        }
+
+        // 3. Obtener el costo del servicio
+        SettingEntity costSetting = settingRepository.findByKeyIgnoreCase("cost_change_password")
+                .orElseThrow(() -> new IllegalStateException("cost_setting_not_found"));
+
+        BigDecimal cost = costSetting.getValueNum();
+
+        // 4. Verificar saldo suficiente
+        if (user.getBalance().compareTo(cost) < 0) {
+            throw new IllegalStateException("insufficient_balance");
+        }
+
+        // 5. Aplicar cambios
+        user.setBalance(user.getBalance().subtract(cost));
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setPasswordAlgo("argon2id");
+        userRepository.save(user);
+
+        // 6. Registrar movimiento en Wallet
+        WalletTransaction tx = WalletTransaction.builder()
+                .user(user)
+                .type("password_change")
+                .amount(cost.negate()) // Egreso
+                .currency("USD")
+                .exchangeApplied(false)
+                .status("approved")
+                .createdAt(Instant.now())
+                .approvedAt(Instant.now())
+                .approvedBy(user)
+                .description("Cambio de contraseña de usuario")
+                .build();
+
+        walletTransactionRepository.save(tx);
+    }
 }

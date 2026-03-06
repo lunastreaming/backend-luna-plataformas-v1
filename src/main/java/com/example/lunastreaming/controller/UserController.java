@@ -99,5 +99,14 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
+    @PatchMapping("/me/password")
+    public ResponseEntity<Void> selfChangePassword(
+            @Valid @RequestBody SelfChangePasswordRequest req,
+            Principal principal
+    ) {
+        // Usamos el ID o username del principal
+        userService.selfChangePassword(principal.getName(), req);
+        return ResponseEntity.noContent().build();
+    }
 
 }
