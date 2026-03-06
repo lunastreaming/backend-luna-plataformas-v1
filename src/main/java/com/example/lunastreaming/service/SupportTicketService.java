@@ -113,6 +113,7 @@ public class SupportTicketService {
 
         // 4) Persistir cambios
         stockRepository.save(stock);
+        if (request.getResolutionNote() != null) ticket.setResolutionNote(request.getResolutionNote());
         supportTicketRepository.save(ticket);
 
         // 5) Devolver DTO del ticket (incluye estado actualizado)
