@@ -281,7 +281,7 @@ public class WalletService {
         Pageable pageable = PageRequest.of(Math.max(0, page), PAGE_SIZE, sort);
 
         // 3. Filtros predefinidos
-        List<String> allowedTypes = Arrays.asList("recharge", "withdrawal", "chargeback", "transfer", "publish", "phone_change");
+        List<String> allowedTypes = Arrays.asList("recharge", "withdrawal", "chargeback", "transfer", "publish", "phone_change", "password_change");
         String excludedStatus = "cancelled";
 
         // 4. Consulta al repositorio (Búsqueda en ambas columnas)
