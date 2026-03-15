@@ -834,6 +834,7 @@ public class StockService {
     public StockResponse renewStock(Long stockId, RenewRequest req, Principal principal) {
         UUID buyerId = resolveUserIdFromPrincipal(principal);
 
+        // 1. Obtener y validar Comprador
         UserEntity buyer = userRepository.findById(buyerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comprador no encontrado"));
 
@@ -841,6 +842,7 @@ public class StockService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña ingresada es incorrecta");
         }
 
+        // 2. Obtener y validar Stock y Producto
         StockEntity stock = stockRepository.findById(stockId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Stock no encontrado"));
 
@@ -849,7 +851,6 @@ public class StockService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Producto no asociado");
         }
 
-        // Validar que el producto sea renovable
         if (!Boolean.TRUE.equals(product.getIsRenewable())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "El producto no permite renovaciones");
         }
@@ -859,82 +860,82 @@ public class StockService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "El producto no tiene precio de renovación definido");
         }
 
-        // Validar saldo
+        // 3. Validar Saldo del Comprador
         if (buyer.getBalance().compareTo(renewalPrice) < 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Saldo insuficiente");
         }
 
-        // Descontar saldo comprador
-        buyer.setBalance(buyer.getBalance().subtract(renewalPrice));
-        userRepository.save(buyer);
-
-        // Registrar transacción de renovación
-        walletTransactionRepository.save(WalletTransaction.builder()
-                .user(buyer)
-                .type("renewal")
-                .amount(renewalPrice.negate())
-                .currency("USD")
-                .status("approved")
-                .createdAt(Instant.now())
-                .approvedAt(Instant.now())
-                .description("Renovación de stock del producto: " + product.getName())
-                .exchangeApplied(false)
-                .build());
-
-        // Acreditar proveedor
+        // 4. Obtener Proveedor
         UserEntity provider = userRepository.findById(product.getProviderId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
 
+        // 5. MOVIMIENTO DE SALDOS (Atomicidad)
+        buyer.setBalance(buyer.getBalance().subtract(renewalPrice));
         provider.setBalance(provider.getBalance().add(renewalPrice));
-        userRepository.save(provider);
 
+        // 6. REGISTRO DE TRANSACCIONES (Auditoría)
+        Instant now = Instant.now();
+
+        // Transacción del Comprador (Egreso)
+        walletTransactionRepository.save(WalletTransaction.builder()
+                .user(buyer)
+                .stock(stock) // 🚩 Vínculo directo para reembolsos futuros
+                .type("renewal")
+                .amount(renewalPrice.negate())
+                .currency("USD")
+                .status("approved") // Queda 'approved' (dinero movido), pero NO 'applied' (tiempo entregado)
+                .createdAt(now)
+                .approvedAt(now)
+                .description("Solicitud de renovación: " + product.getName())
+                .exchangeApplied(false)
+                .build());
+
+        // Transacción del Proveedor (Ingreso)
         walletTransactionRepository.save(WalletTransaction.builder()
                 .user(provider)
+                .stock(stock)
                 .type("sale")
                 .amount(renewalPrice)
                 .currency("USD")
                 .status("approved")
-                .createdAt(Instant.now())
-                .approvedAt(Instant.now())
-                .description("Renovación de stock del producto: " + product.getName())
+                .createdAt(now)
+                .approvedAt(now)
+                .description("Ingreso por renovación: " + product.getName())
                 .exchangeApplied(false)
                 .build());
 
-        // Actualizar fechas del stock y estado
-        Instant now = Instant.now();
-        Integer days = product.getDays() == null ? 0 : product.getDays();
+        // 7. ACTUALIZACIÓN DEL ESTADO DEL STOCK (Sin tocar fechas)
+        // El stock pasa a RENEWED para avisar al proveedor que debe trabajar en él
+        stock.setStatus("RENEWED");
 
-        if (stock.getEndAt() == null || stock.getEndAt().isBefore(now)) {
-            // Expirado: reiniciar fechas
-            stock.setStartAt(now);
-            stock.setEndAt(days > 0 ? now.plus(days, ChronoUnit.DAYS) : null);
-            stock.setStatus("RENEWED"); // 🚩 nuevo estado explícito
-        } else {
-            // Vigente: sumar días a la fecha fin
-            stock.setEndAt(stock.getEndAt().plus(days, ChronoUnit.DAYS));
-            stock.setStatus("RENEWED"); // 🚩 mantenemos activo  // puede ser active
-        }
-
-        // Acumular purchasePrice con la renovación
+        // Actualizamos el purchasePrice histórico acumulado
         stock.setPurchasePrice(stock.getPurchasePrice().add(renewalPrice));
 
+        // Guardamos cambios en todas las entidades involucradas
+        userRepository.save(buyer);
+        userRepository.save(provider);
         stockRepository.save(stock);
+
         return stockBuilder.toStockResponse(stock);
     }
 
     @Transactional(readOnly = true)
     public Page<StockResponse> getProviderRenewedStocks(Principal principal, Pageable pageable) {
         UUID providerId = resolveUserIdFromPrincipal(principal);
+        UserEntity provider = userRepository.findById(providerId).orElseThrow();
 
-        UserEntity provider = userRepository.findById(providerId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
-
-        // 🚩 Buscar stocks del proveedor con estado RENEWED, paginados
         Page<StockEntity> stocks = stockRepository.findByProductProviderIdAndStatus(providerId, "RENEWED", pageable);
 
-        // mapear cada StockEntity -> StockResponse
         return stocks.map(s -> {
             StockResponse resp = stockBuilder.toStockResponse(s);
+
+            // Suma solo lo que está en 'approved' (reembolsable)
+            BigDecimal realRefund = walletTransactionRepository
+                    .findByStockIdAndTypeAndStatus(s.getId(), "renewal", "approved")
+                    .stream().map(tx -> tx.getAmount().abs())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            resp.setRefund(realRefund);
             resp.setProviderName(provider.getUsername());
             resp.setProviderPhone(provider.getPhone());
             return resp;
@@ -964,19 +965,56 @@ public class StockService {
 
     @Transactional
     public void approveRenewal(Long id) {
+        // 1. Buscar el stock y validar estado
         StockEntity stock = stockRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Stock no encontrado con id " + id));
 
         if (!"RENEWED".equals(stock.getStatus())) {
-            throw new IllegalStateException("El stock no está en estado RENEWED");
+            throw new IllegalStateException("El stock no tiene una solicitud de renovación pendiente.");
         }
 
-        stock.setStatus("sold");
-        stock.setRenewedAt(Instant.now());
+        // 2. Obtener TODAS las transacciones de renovación aprobadas pero no aplicadas
+        List<WalletTransaction> pendingTransactions = walletTransactionRepository
+                .findByStockIdAndTypeAndStatus(id, "renewal", "approved");
 
+        if (pendingTransactions.isEmpty()) {
+            throw new IllegalStateException("No se encontraron pagos pendientes de aplicación para este stock.");
+        }
+
+        // 3. Calcular el total de días a sumar
+        // Multiplicamos los días del producto por la cantidad de transacciones encontradas
+        Integer daysPerRenewal = stock.getProduct().getDays() != null ? stock.getProduct().getDays() : 0;
+        if (daysPerRenewal <= 0) {
+            throw new IllegalStateException("El producto no tiene una duración válida configurada.");
+        }
+
+        int totalDaysToAdd = daysPerRenewal * pendingTransactions.size();
+
+        // 4. Actualizar la fecha de vencimiento (endAt)
+        Instant now = Instant.now();
+
+        // Si el stock ya venció, empezamos desde hoy. Si es vigente, sumamos al endAt actual.
+        Instant baseDate = (stock.getEndAt() != null && stock.getEndAt().isAfter(now))
+                ? stock.getEndAt()
+                : now;
+
+        stock.setEndAt(baseDate.plus(totalDaysToAdd, ChronoUnit.DAYS));
+
+        // 5. Cambiar estado del Stock y marcar renovación
+        stock.setStatus("sold"); // O "sold" según tu estándar de base de datos
+        stock.setRenewedAt(now);
+
+        // 6. Consolidación Masiva de Transacciones
+        // Marcamos todas como 'applied' para que ya no salgan en la lista de pendientes de reembolso
+        pendingTransactions.forEach(tx -> {
+            tx.setStatus("applied");
+            tx.setApprovedAt(now);
+        });
+
+        // 7. Persistencia de cambios
         stockRepository.save(stock);
+        walletTransactionRepository.saveAll(pendingTransactions);
     }
-
 
     @Transactional
     public void confirmRefund(Long stockId, Principal principal) {
@@ -994,6 +1032,71 @@ public class StockService {
         }
 
         stock.setStatus("refund_confirmed");
+        stockRepository.save(stock);
+    }
+
+    @Transactional
+    public void processProviderRenewalRefund(Long stockId, Principal principal) {
+        UUID providerId = resolveUserIdFromPrincipal(principal);
+        Instant now = Instant.now();
+
+        StockEntity stock = stockRepository.findById(stockId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Stock no encontrado"));
+
+        // 1. Validar que quien ejecuta es el dueño del producto (el proveedor)
+        if (!stock.getProduct().getProviderId().equals(providerId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes permiso para reembolsar este stock");
+        }
+
+        // 2. Validar que el stock esté realmente en estado RENEWED
+        if (!"RENEWED".equalsIgnoreCase(stock.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Este stock no tiene renovaciones pendientes");
+        }
+
+        // 3. Obtener las renovaciones aprobadas (dinero que el proveedor tiene pero no ha entregado tiempo)
+        List<WalletTransaction> pendingRenewals = walletTransactionRepository
+                .findByStockIdAndTypeAndStatus(stockId, "renewal", "approved");
+
+        BigDecimal totalToRefund = pendingRenewals.stream()
+                .map(tx -> tx.getAmount().abs())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (totalToRefund.compareTo(BigDecimal.ZERO) > 0) {
+            UserEntity buyer = stock.getBuyer();
+            UserEntity provider = userRepository.findById(providerId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proveedor no encontrado"));
+
+            // A. Ajuste de balances (Devolver dinero al cliente)
+            buyer.setBalance(buyer.getBalance().add(totalToRefund));
+            provider.setBalance(provider.getBalance().subtract(totalToRefund));
+
+            // B. Marcar transacciones originales como anuladas
+            pendingRenewals.forEach(tx -> tx.setStatus("extornado"));
+
+            // C. Crear registro de reembolso
+            walletTransactionRepository.save(WalletTransaction.builder()
+                    .user(buyer)
+                    .stock(stock)
+                    .type("refund")
+                    .amount(totalToRefund)
+                    .currency("USD")
+                    .status("approved")
+                    .createdAt(now)
+                    .description("Reembolso de renovación por parte del proveedor")
+                    .exchangeApplied(false)
+                    .build());
+
+            userRepository.save(buyer);
+            userRepository.save(provider);
+            walletTransactionRepository.saveAll(pendingRenewals);
+        }
+
+        // 4. Restaurar el estado del stock
+        // Como devolvimos el dinero, el stock vuelve a estar vendido (o expirado)
+        boolean isExpired = stock.getEndAt() != null && stock.getEndAt().isBefore(now);
+        stock.setStatus(isExpired ? "sold" : "sold"); // Puedes usar un estado 'EXPIRED' si lo tienes
+        stock.setResolutionNote("Renovación rechazada y reembolsada por el proveedor el " + now);
+
         stockRepository.save(stock);
     }
 

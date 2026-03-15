@@ -56,6 +56,9 @@ public class WalletTransaction {
     @Column(name = "real_amount", precision = 20, scale = 2)
     private BigDecimal realAmount;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "stock_id")
+    private StockEntity stock;
 
 
 }

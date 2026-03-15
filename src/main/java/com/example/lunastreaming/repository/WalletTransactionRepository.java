@@ -63,4 +63,11 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
             Pageable pageable
     );
 
+    @Query("SELECT w FROM WalletTransaction w WHERE w.stock.id = :stockId AND w.type = :type AND w.status = :status")
+    List<WalletTransaction> findByStockIdAndTypeAndStatus(
+            @Param("stockId") Long stockId,
+            @Param("type") String type,
+            @Param("status") String status
+    );
+
 }
