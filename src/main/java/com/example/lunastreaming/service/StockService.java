@@ -886,7 +886,7 @@ public class StockService {
                 .status("approved") // Queda 'approved' (dinero movido), pero NO 'applied' (tiempo entregado)
                 .createdAt(now)
                 .approvedAt(now)
-                .description("Solicitud de renovación: " + product.getName())
+                .description("Solicitud de renovación: " + product.getName() + stock.getId())
                 .exchangeApplied(false)
                 .build());
 
@@ -900,7 +900,7 @@ public class StockService {
                 .status("approved")
                 .createdAt(now)
                 .approvedAt(now)
-                .description("Ingreso por renovación: " + product.getName())
+                .description("Ingreso por renovación: " + product.getName() + stock.getId())
                 .exchangeApplied(false)
                 .build());
 
@@ -1082,7 +1082,7 @@ public class StockService {
                     .currency("USD")
                     .status("approved")
                     .createdAt(now)
-                    .description("Reembolso de renovación por parte del proveedor")
+                    .description("Reembolso de renovación por parte del proveedor" + stock.getId())
                     .exchangeApplied(false)
                     .build());
 
