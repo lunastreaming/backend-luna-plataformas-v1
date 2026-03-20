@@ -1,5 +1,6 @@
 package com.example.lunastreaming.service;
 
+import com.example.lunastreaming.model.ProviderProfileEntity;
 import com.example.lunastreaming.model.SettingEntity;
 import com.example.lunastreaming.model.UserEntity;
 import com.example.lunastreaming.model.WalletTransaction;
@@ -48,6 +49,11 @@ public class SupplierService {
                 .orElseThrow(() -> new RuntimeException("Proveedor no encontrado"));
         UserEntity seller = userRepository.findById(sellerId)
                 .orElseThrow(() -> new RuntimeException("Vendedor no encontrado"));
+
+        ProviderProfileEntity profile = supplier.getProviderProfile();
+        if (profile == null || !Boolean.TRUE.equals(profile.getCanTransfer())) {
+            throw new IllegalStateException("El proveedor no tiene permisos para realizar transferencias");
+        }
 
         // 4. Actualizar balances
         supplier.setBalance(supplier.getBalance().subtract(totalToDebit));
