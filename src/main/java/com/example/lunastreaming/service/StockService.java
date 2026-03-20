@@ -393,30 +393,46 @@ public class StockService {
             String q,
             int page,
             int size,
-            String sort
+            String sort,
+            Integer days // Filtro dinámico de días para vencimiento
     ) {
         UUID buyerId = resolveUserIdFromPrincipal(principal);
 
+        // Configuración de paginación (por defecto ordena por fecha de venta)
         Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
 
-        // 1) obtener stockIds que tienen tickets en estado activo (OPEN, IN_PROGRESS)
+        // 1) Obtener stockIds que tienen tickets en estado activo (OPEN, IN_PROGRESS) para excluirlos
         List<Long> excludedStockIds = stockRepository.findStockIdsByStatusIn(List.of("OPEN", "IN_PROGRESS"));
 
-        // 2) estados que queremos listar (SOLD + RENEWED)
+        // 2) Definir estados permitidos para el listado de compras del cliente
         List<String> allowedStatuses = List.of("sold", "RENEWED");
 
         Page<StockEntity> p;
 
-        // 3) elegir la consulta adecuada según si hay excludedStockIds
-        if (excludedStockIds == null || excludedStockIds.isEmpty()) {
-            // traer SOLO stocks del cliente con estado SOLD o RENEWED
-            p = stockRepository.findByBuyerIdAndStatusIn(buyerId, allowedStatuses, pageable);
+        // 3) Lógica de consulta según el filtro de días (near expiry)
+        if (days != null) {
+            // Solo ponemos el tope máximo (hoy + N días)
+            Instant limitDate = Instant.now().plus(days, ChronoUnit.DAYS);
+
+            if (excludedStockIds == null || excludedStockIds.isEmpty()) {
+                // Usamos LessThanEqual para traer TODO lo que venza antes de esa fecha
+                p = stockRepository.findByBuyerIdAndStatusInAndEndAtLessThanEqual(
+                        buyerId, allowedStatuses, limitDate, pageable);
+            } else {
+                p = stockRepository.findByBuyerIdAndStatusInAndIdNotInAndEndAtLessThanEqual(
+                        buyerId, allowedStatuses, excludedStockIds, limitDate, pageable);
+            }
         } else {
-            // traer SOLO stocks del cliente con estado SOLD o RENEWED y excluir los que tienen tickets activos
-            p = stockRepository.findByBuyerIdAndStatusInAndIdNotIn(buyerId, allowedStatuses, excludedStockIds, pageable);
+            // Comportamiento original: listar todas las compras sin importar la fecha de fin
+            if (excludedStockIds == null || excludedStockIds.isEmpty()) {
+                p = stockRepository.findByBuyerIdAndStatusIn(buyerId, allowedStatuses, pageable);
+            } else {
+                p = stockRepository.findByBuyerIdAndStatusInAndIdNotIn(buyerId, allowedStatuses, excludedStockIds, pageable);
+            }
         }
 
-        // 4) provider enrichment (batch)
+        // 4) Provider enrichment (Batch Processing)
+        // Extraemos todos los providerIds de la página actual para evitar el problema N+1
         Set<UUID> providerIds = p.stream()
                 .map(StockEntity::getProduct)
                 .filter(Objects::nonNull)
@@ -430,7 +446,7 @@ public class StockService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(UserEntity::getId, Function.identity()));
 
-        // 5) obtener stockIds de la página resultante para cargar tickets cerrados (RESOLVED)
+        // 5) Obtener stockIds de la página resultante para cargar tickets cerrados (RESOLVED)
         List<Long> pageStockIds = p.stream()
                 .map(StockEntity::getId)
                 .collect(Collectors.toList());
@@ -439,7 +455,7 @@ public class StockService {
                 ? Collections.emptyList()
                 : supportTicketRepository.findByStockIdInAndStatusIn(pageStockIds, List.of("RESOLVED"));
 
-        // 6) mapear stockId -> ticket preferido (más reciente por resolvedAt)
+        // 6) Mapear stockId -> ticket preferido (el más reciente basado en resolución o actualización)
         Map<Long, SupportTicketEntity> ticketByStockId = resolvedTickets.stream()
                 .collect(Collectors.groupingBy(
                         t -> t.getStock().getId(),
@@ -451,11 +467,12 @@ public class StockService {
                         )
                 ));
 
-        // 7) mapear cada stock a StockResponse y enriquecer con provider y soporte
+        // 7) Transformar StockEntity a StockResponse y enriquecer con Provider y Soporte
         Page<StockResponse> mapped = p.map(stock -> {
+            // Usamos el builder existente para la estructura base
             StockResponse dto = stockBuilder.toStockResponse(stock);
 
-            // provider enrichment
+            // Enriquecimiento de datos del Proveedor (Provider)
             ProductEntity prod = stock.getProduct();
             if (prod != null && prod.getProviderId() != null) {
                 UserEntity prov = providersById.get(prod.getProviderId());
@@ -465,7 +482,7 @@ public class StockService {
                 }
             }
 
-            // soporte: rellenar solo si existe ticket cerrado
+            // Enriquecimiento de Soporte: Solo si existe un ticket resuelto para este stock
             SupportTicketEntity ticket = ticketByStockId.get(stock.getId());
             if (ticket != null) {
                 dto.setSupportId(ticket.getId());
@@ -483,6 +500,27 @@ public class StockService {
         });
 
         return toPagedResponse(mapped);
+    }
+
+    /**
+     * Método auxiliar para encapsular la lógica de consulta a BD
+     */
+    private Page<StockEntity> fetchStockEntities(UUID buyerId, List<String> statuses, List<Long> excludedIds, boolean nearExpiry, Pageable pageable) {
+        if (nearExpiry) {
+            Instant now = Instant.now();
+            Instant fiveDaysFromNow = now.plus(5, ChronoUnit.DAYS);
+
+            if (excludedIds == null || excludedIds.isEmpty()) {
+                return stockRepository.findByBuyerIdAndStatusInAndEndAtBetween(buyerId, statuses, now, fiveDaysFromNow, pageable);
+            }
+            return stockRepository.findByBuyerIdAndStatusInAndIdNotInAndEndAtBetween(buyerId, statuses, excludedIds, now, fiveDaysFromNow, pageable);
+        }
+
+        // Lógica original (sin filtro de fecha)
+        if (excludedIds == null || excludedIds.isEmpty()) {
+            return stockRepository.findByBuyerIdAndStatusIn(buyerId, statuses, pageable);
+        }
+        return stockRepository.findByBuyerIdAndStatusInAndIdNotIn(buyerId, statuses, excludedIds, pageable);
     }
 
     /**

@@ -138,9 +138,10 @@ public class StockController {
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String sort
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) Integer days // Parámetro opcional para días
     ) {
-        return stockService.listPurchases(principal, q, page, size, sort);
+        return stockService.listPurchases(principal, q, page, size, sort, days);
     }
 
     /**

@@ -180,5 +180,30 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(value = "SELECT s FROM StockEntity s WHERE s.product.id = :productId AND s.status = 'active' LIMIT 1")
     Optional<StockEntity> findFirstByProductIdAndStatusWithLock(@Param("productId") UUID productId, @Param("status") String status);
+
+    // Filtro para usuarios específicos con estados permitidos y rango de fecha de vencimiento
+    Page<StockEntity> findByBuyerIdAndStatusInAndEndAtBetween(
+            UUID buyerId,
+            List<String> statuses,
+            Instant startRange,
+            Instant endRange,
+            Pageable pageable
+    );
+
+    // Versión excluyendo IDs (para tu lógica de tickets activos)
+    Page<StockEntity> findByBuyerIdAndStatusInAndIdNotInAndEndAtBetween(
+            UUID buyerId,
+            List<String> statuses,
+            List<Long> excludedIds,
+            Instant startRange,
+            Instant endRange,
+            Pageable pageable
+    );
+
+    Page<StockEntity> findByBuyerIdAndStatusInAndEndAtLessThanEqual(
+            UUID buyerId, List<String> statuses, Instant limit, Pageable pageable);
+
+    Page<StockEntity> findByBuyerIdAndStatusInAndIdNotInAndEndAtLessThanEqual(
+            UUID buyerId, List<String> statuses, List<Long> excludedIds, Instant limit, Pageable pageable);
 }
 
