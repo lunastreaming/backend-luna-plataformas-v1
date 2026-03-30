@@ -274,6 +274,11 @@ public class StockService {
         UserEntity buyer = userRepository.findByIdForUpdate(buyerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comprador no encontrado"));
 
+        // Validación con minúsculas
+        if (!"active".equalsIgnoreCase(buyer.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "La cuenta del usuario no está activa");
+        }
+
         // 2. Validaciones de acceso y seguridad
         if (!"seller".equals(buyer.getRole())) {
             throw new AccessDeniedException("El usuario no cuenta con los accesos para esta acción");
@@ -875,6 +880,11 @@ public class StockService {
         // 1. Obtener y validar Comprador
         UserEntity buyer = userRepository.findById(buyerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comprador no encontrado"));
+
+        // Validación con minúsculas
+        if (!"active".equalsIgnoreCase(buyer.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "La cuenta del usuario no está activa");
+        }
 
         if (!passwordEncoder.matches(req.getPassword(), buyer.getPasswordHash())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña ingresada es incorrecta");
