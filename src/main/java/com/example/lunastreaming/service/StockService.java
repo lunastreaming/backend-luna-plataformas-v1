@@ -215,10 +215,10 @@ public class StockService {
             throw new AccessDeniedException("No autorizado para eliminar este stock");
         }
 
-        // VALIDACIÓN EXTRA: No borrar si ya fue vendido (Opcional pero recomendado)
+        /* VALIDACIÓN EXTRA: No borrar si ya fue vendido (Opcional pero recomendado)
         if (stock.getSoldAt() != null || stock.getBuyer() != null) {
             throw new IllegalStateException("No se puede eliminar un stock que ya ha sido vendido");
-        }
+        }*/
 
         // Hibernate ejecutará el UPDATE gracias a @SQLDelete
         stockRepository.delete(stock);
@@ -1213,10 +1213,10 @@ public class StockService {
                 throw new AccessDeniedException("No autorizado para eliminar el stock con ID: " + stock.getId());
             }
 
-            // Evitar borrar stocks ya vendidos (Consistencia financiera)
+            /* Evitar borrar stocks ya vendidos (Consistencia financiera)
             if (stock.getSoldAt() != null) {
                 throw new IllegalStateException("El stock con ID " + stock.getId() + " ya ha sido vendido y no puede eliminarse");
-            }
+            }*/
         }
 
         // 3. Ejecutar la eliminación

@@ -2,6 +2,8 @@ package com.example.lunastreaming.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -9,6 +11,8 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "stock")
+@SQLDelete(sql = "UPDATE stock SET deleted = true WHERE id = ?")
+@SQLRestriction("deleted = false")
 @Builder
 @Getter
 @Setter
