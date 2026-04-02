@@ -72,10 +72,7 @@ public class StockController {
     }
 
     @DeleteMapping("/remove/{id}")
-    public ResponseEntity<Void> delete(
-            @PathVariable Long id,
-            Principal principal) {
-
+    public ResponseEntity<Void> delete(@PathVariable Long id, Principal principal) {
         stockService.deleteStock(id, principal);
         return ResponseEntity.noContent().build();
     }
@@ -230,6 +227,15 @@ public class StockController {
 
         stockService.updateClientName(id, newName);
 
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/remove-multiple")
+    public ResponseEntity<Void> deleteMultiple(
+            @RequestBody List<Long> ids,
+            Principal principal) {
+
+        stockService.deleteMultipleStocks(ids, principal);
         return ResponseEntity.noContent().build();
     }
 }

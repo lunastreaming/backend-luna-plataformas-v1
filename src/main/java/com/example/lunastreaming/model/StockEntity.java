@@ -69,6 +69,9 @@ public class StockEntity {
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
 
+    @Column(name = "deleted", nullable = false)
+    private boolean deleted = false;
+
     @PrePersist
     @PreUpdate
     public void prePersist() {

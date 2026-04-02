@@ -203,34 +203,26 @@ public class StockService {
     public void deleteStock(Long stockId, Principal principal) {
         if (stockId == null) throw new IllegalArgumentException("stockId es requerido");
 
+        // Esto solo encontrará el stock si deleted = false
         StockEntity stock = stockRepository.findById(stockId)
-                .orElseThrow(() -> new IllegalArgumentException("Stock no encontrado: " + stockId));
+                .orElseThrow(() -> new IllegalArgumentException("Stock no encontrado o ya eliminado"));
 
-        ProductEntity product = stock.getProduct();
-        if (product == null) {
-            throw new IllegalStateException("Stock no tiene producto asociado");
-        }
-
+        // Validación de propiedad (Provider)
         UUID providerIdFromPrincipal = resolveProviderIdFromPrincipal(principal);
-
-        // Ajusta esta comprobación según tu modelo:
-        // - si ProductEntity tiene getProviderId() (UUID) usa eso
-        // - si ProductEntity tiene getProvider() -> ProviderEntity -> getId() usa eso
-        UUID productProviderId;
-        if (product.getProviderId() != null) {
-            productProviderId = product.getProviderId();
-        } else {
-            throw new IllegalStateException("No se pudo determinar owner del producto");
-        }
+        UUID productProviderId = stock.getProduct().getProviderId();
 
         if (!providerIdFromPrincipal.equals(productProviderId)) {
             throw new AccessDeniedException("No autorizado para eliminar este stock");
         }
 
-        // si necesitas lógica extra (soft delete, auditoría) agrégala aquí
+        // VALIDACIÓN EXTRA: No borrar si ya fue vendido (Opcional pero recomendado)
+        if (stock.getSoldAt() != null || stock.getBuyer() != null) {
+            throw new IllegalStateException("No se puede eliminar un stock que ya ha sido vendido");
+        }
+
+        // Hibernate ejecutará el UPDATE gracias a @SQLDelete
         stockRepository.delete(stock);
     }
-
     @Transactional
     public StockResponse setStatus(Long stockId, String newStatus, Principal principal) {
         // validación básica del nuevo estado (ajusta valores permitidos a tu dominio)
@@ -1199,6 +1191,37 @@ public class StockService {
 
         stock.setClientName(newName);
         stockRepository.save(stock);
+    }
+
+    @Transactional
+    public void deleteMultipleStocks(List<Long> ids, Principal principal) {
+        if (ids == null || ids.isEmpty()) {
+            throw new IllegalArgumentException("La lista de IDs no puede estar vacía");
+        }
+
+        UUID providerIdFromPrincipal = resolveProviderIdFromPrincipal(principal);
+
+        // 1. Buscamos todos los stocks por sus IDs
+        List<StockEntity> stocks = stockRepository.findAllById(ids);
+
+        // 2. Validaciones de seguridad y negocio
+        for (StockEntity stock : stocks) {
+            // Verificar propiedad del producto asociado al stock
+            UUID productProviderId = stock.getProduct().getProviderId();
+
+            if (!providerIdFromPrincipal.equals(productProviderId)) {
+                throw new AccessDeniedException("No autorizado para eliminar el stock con ID: " + stock.getId());
+            }
+
+            // Evitar borrar stocks ya vendidos (Consistencia financiera)
+            if (stock.getSoldAt() != null) {
+                throw new IllegalStateException("El stock con ID " + stock.getId() + " ya ha sido vendido y no puede eliminarse");
+            }
+        }
+
+        // 3. Ejecutar la eliminación
+        // Gracias al @SQLDelete en la entidad, esto hará un UPDATE masivo de la columna 'deleted'
+        stockRepository.deleteAll(stocks);
     }
 
 }
