@@ -16,6 +16,7 @@ import java.security.Principal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 import static java.math.BigDecimal.ZERO;
@@ -70,29 +71,30 @@ public class RefundService {
         UserEntity provider = userRepository.findById(providerId)
                 .orElseThrow(() -> new IllegalArgumentException("provider_not_found"));
 
-        // 5) calcular refund con lógica adicional
-        BigDecimal refund = ZERO;
+        // 5) CALCULO DE REEMBOLSO (Sincronizado con la lógica de la Vista/Builder)
+        BigDecimal refund = BigDecimal.ZERO;
         BigDecimal productPrice = stock.getPurchasePrice();
-        Integer productDays = product.getDays();
 
-        if (productPrice == null || productPrice.compareTo(ZERO) <= 0) {
+        if (productPrice == null || productPrice.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("invalid_product_price");
         }
 
         if (stock.getStartAt() != null && stock.getEndAt() != null) {
-            LocalDate today = LocalDate.now(ZoneOffset.UTC);
-            LocalDate startDate = stock.getStartAt().atZone(ZoneOffset.UTC).toLocalDate();
+            // CAMBIO CLAVE: Calculamos los días reales contratados (para renovaciones)
+            Integer totalContractedDays = computeDaysBetween(stock.getStartAt(), stock.getEndAt(), true);
 
-            if (startDate.equals(today)) {
-                // 👇 compra y ejecución el mismo día → refund = precio completo
-                refund = productPrice.setScale(2, RoundingMode.HALF_UP);
-            } else {
-                // 👇 cálculo proporcional normal
-                refund = computeRefund(productPrice, productPrice, productDays, stock.getEndAt(), ZERO);
-            }
+            // LLAMADA AL COMPUTE COMPLETO (6 parámetros)
+            refund = computeRefund(
+                    productPrice,          // paidAmount
+                    productPrice,          // productPrice
+                    totalContractedDays,   // totalContractedDays (divisor dinámico)
+                    stock.getEndAt(),      // endAt
+                    BigDecimal.ZERO,       // feePercent (0%)
+                    stock.getStartAt()     // startAt (para regla mismo día)
+            );
         }
 
-        if (refund == null || refund.compareTo(ZERO) <= 0) {
+        if (refund == null || refund.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("refund_amount_zero");
         }
 
@@ -114,9 +116,7 @@ public class RefundService {
             }
         }
 
-
         // 7) crear transacciones wallet
-
         WalletTransaction txCredit = WalletTransaction.builder()
                 .user(buyer)
                 .type("refund")
@@ -203,15 +203,52 @@ public class RefundService {
         }
     }
 
-    private BigDecimal computeRefund(BigDecimal productPrice, BigDecimal productPrice2, Integer productDays, Instant endAt, BigDecimal zero) {
-        // Reemplaza por tu lógica real si ya existe; ejemplo prorrateo:
-        if (productPrice == null || productDays == null || productDays <= 0) {
+    private BigDecimal computeRefund(
+            final BigDecimal paidAmount,
+            final BigDecimal productPrice,
+            final Integer totalContractedDays, // 👈 Este es el divisor dinámico que calculamos fuera
+            final Instant endAt,
+            final BigDecimal feePercent,
+            final Instant startAt
+    ) {
+        // 1. Determinar el precio base
+        BigDecimal price = paidAmount != null ? paidAmount : productPrice;
+
+        // 2. Validaciones de seguridad
+        // Usamos totalContractedDays para la validación porque es nuestra nueva base
+        if (price == null || totalContractedDays == null || totalContractedDays <= 0 || endAt == null) {
             return BigDecimal.ZERO;
         }
-        long daysRemaining = java.time.Duration.between(Instant.now(), endAt).toDays();
-        if (daysRemaining <= 0) return BigDecimal.ZERO;
-        BigDecimal daily = productPrice.divide(BigDecimal.valueOf(productDays), 8, RoundingMode.HALF_UP);
-        return daily.multiply(BigDecimal.valueOf(daysRemaining)).setScale(2, RoundingMode.HALF_UP);
+
+        // 3. Lógica de "Devolución total el mismo día"
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate startDate = startAt != null ? startAt.atZone(ZoneOffset.UTC).toLocalDate() : null;
+        if (startDate != null && startDate.equals(today)) {
+            return price.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        // 4. Calcular tiempo restante
+        long secondsRemaining = ChronoUnit.SECONDS.between(Instant.now(), endAt);
+        if (secondsRemaining <= 0) return BigDecimal.ZERO;
+
+        // Convertimos segundos restantes a decimal (ej: 190.5 días)
+        BigDecimal daysRemaining = BigDecimal.valueOf(secondsRemaining)
+                .divide(BigDecimal.valueOf(SECONDS_PER_DAY), 8, RoundingMode.HALF_UP);
+
+        // 5. CÁLCULO CRÍTICO:
+        // Evitamos que daysRemaining sea mayor que totalContractedDays por temas de milisegundos
+        BigDecimal effectiveDaysRemaining = daysRemaining.min(BigDecimal.valueOf(totalContractedDays));
+
+        // Refund = Precio * (Días Restantes / Días Totales del Contrato)
+        BigDecimal refund = price.multiply(effectiveDaysRemaining)
+                .divide(BigDecimal.valueOf(totalContractedDays), 8, RoundingMode.HALF_UP);
+
+        // 6. Aplicar comisión si existe
+        if (feePercent != null && feePercent.compareTo(BigDecimal.ZERO) > 0) {
+            refund = refund.multiply(BigDecimal.ONE.subtract(feePercent));
+        }
+
+        return refund.setScale(2, RoundingMode.HALF_UP);
     }
 
     @Transactional
@@ -369,31 +406,34 @@ public class RefundService {
         UserEntity provider = userRepository.findById(providerIdFromPrincipal)
                 .orElseThrow(() -> new IllegalArgumentException("provider_not_found"));
 
-        // 5) calcular refund con lógica adicional
-        BigDecimal refund = ZERO;
+        // 5) CALCULO DE REEMBOLSO (Sincronizado con la lógica de la Vista/Builder)
+        BigDecimal refund = BigDecimal.ZERO;
         BigDecimal productPrice = stock.getPurchasePrice();
-        Integer productDays = stock.getProduct().getDays();
 
-        if (productPrice == null || productPrice.compareTo(ZERO) <= 0) {
+        if (productPrice == null || productPrice.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("invalid_product_price");
         }
 
         if (stock.getStartAt() != null && stock.getEndAt() != null) {
-            LocalDate today = LocalDate.now(ZoneOffset.UTC);
-            LocalDate startDate = stock.getStartAt().atZone(ZoneOffset.UTC).toLocalDate();
+            // Calculamos los días reales contratados (Crucial para renovaciones)
+            Integer totalContractedDays = computeDaysBetween(stock.getStartAt(), stock.getEndAt(), true);
 
-            if (startDate.equals(today)) {
-                // 👇 compra y ejecución el mismo día → refund = precio completo
-                refund = productPrice.setScale(2, RoundingMode.HALF_UP);
-            } else {
-                // 👇 cálculo proporcional normal
-                refund = computeRefund(productPrice, productPrice, productDays, stock.getEndAt(), ZERO);
-            }
+            // Llamamos al computeRefund de 6 parámetros (el mismo que usa la vista)
+            refund = computeRefund(
+                    productPrice,          // paidAmount
+                    productPrice,          // productPrice
+                    totalContractedDays,   // totalContractedDays (divisor dinámico)
+                    stock.getEndAt(),      // endAt
+                    BigDecimal.ZERO,       // feePercent (0% en este caso)
+                    stock.getStartAt()     // startAt (para validar regla de mismo día)
+            );
         }
 
-        if (refund == null || refund.compareTo(ZERO) <= 0) {
+        if (refund == null || refund.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("refund_amount_zero");
         }
+
+        // Aseguramos escala final (aunque computeRefund ya lo hace)
         refund = refund.setScale(2, RoundingMode.HALF_UP);
 
         // 6) marcar stock como REFUND
@@ -598,6 +638,22 @@ public class RefundService {
             UserEntity user = userRepository.findByUsername(name)
                     .orElseThrow(() -> new AccessDeniedException("Usuario no encontrado: " + name));
             return user.getId(); // o user.getProviderId() si aplica
+        }
+    }
+
+    private static final long SECONDS_PER_DAY = 86_400L;
+
+    private Integer computeDaysBetween(final Instant from, final Instant to, final boolean ceilPositive) {
+        if (from == null || to == null) return null;
+        long seconds = ChronoUnit.SECONDS.between(from, to);
+        if (seconds == 0) return 0;
+        double days = (double) seconds / SECONDS_PER_DAY;
+        if (ceilPositive) {
+            long ceil = (long) Math.ceil(days);
+            return Math.toIntExact(ceil);
+        } else {
+            long floor = (long) Math.floor(days);
+            return Math.toIntExact(floor);
         }
     }
 
