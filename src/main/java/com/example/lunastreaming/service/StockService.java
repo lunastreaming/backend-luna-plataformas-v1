@@ -529,15 +529,38 @@ public class StockService {
      * @param size      tamaño de página
      * @param sort      especificador de orden
      */
-    public PagedResponse<StockResponse> listProviderSales(Principal principal, String q, int page, int size, String sort) {
+    public PagedResponse<StockResponse> listProviderSales(
+            Principal principal,
+            String q,
+            int page,
+            int size,
+            String sort,
+            Integer days
+    ) {
         UUID providerId = resolveUserIdFromPrincipal(principal);
 
         UserEntity provider = userRepository.findById(providerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Provider not found"));
 
+        // El Pageable SIEMPRE debe ser el último parámetro que usemos en el repository
         Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
 
-        Page<StockEntity> p = stockRepository.findSalesByProviderIdPaged(providerId, q, pageable);
+        Page<StockEntity> p;
+        Instant now = Instant.now();
+
+        // Limpiamos el query string para evitar problemas de espacios
+        String searchTerm = (q != null && !q.trim().isEmpty()) ? q.trim() : null;
+
+        if (days != null && days > 0) {
+            // Filtro por vencimiento (Próximos N días)
+            Instant limitDate = now.plus(days, java.time.temporal.ChronoUnit.DAYS);
+
+            p = stockRepository.findSalesByProviderIdAndExpiringSoonPaged(
+                    providerId, searchTerm, now, limitDate, pageable);
+        } else {
+            // Listado normal (con o sin búsqueda 'q')
+            p = stockRepository.findSalesByProviderIdPaged(providerId, searchTerm, pageable);
+        }
 
         Page<StockResponse> mapped = p.map(stock -> {
             StockResponse res = stockBuilder.toStockResponse(stock);
@@ -545,6 +568,7 @@ public class StockService {
             res.setProviderPhone(provider.getPhone());
             return res;
         });
+
         return toPagedResponse(mapped);
     }
 

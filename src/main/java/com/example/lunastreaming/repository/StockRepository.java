@@ -39,19 +39,25 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     Page<StockEntity> findByBuyerIdPaged(@Param("buyerId") UUID buyerId, Pageable pageable);
 
     // Ventas de un proveedor: producto cuyo providerId = :providerId y status = 'sold'
+    // MÉTODO VIEJO (Para que no se rompa nada de lo anterior)
     @Query("""
-  SELECT s
-  FROM StockEntity s
-  JOIN s.product p
-  LEFT JOIN s.buyer b
-  WHERE p.providerId = :providerId
+  SELECT s FROM StockEntity s JOIN s.product p 
+  WHERE p.providerId = :providerId AND s.status = 'sold'
+""")
+    Page<StockEntity> findSalesByProviderIdPaged(UUID providerId, Pageable pageable);
+
+    // MÉTODO NUEVO (Para tu buscador y filtros nuevos)
+    @Query("""
+  SELECT s FROM StockEntity s JOIN s.product p 
+  WHERE p.providerId = :providerId 
     AND s.status = 'sold'
-    AND (:q IS NULL OR LOWER(s.username) LIKE LOWER(CONCAT('%', :q, '%')) 
+    AND (:q IS NULL OR :q = '' 
+        OR LOWER(s.username) LIKE LOWER(CONCAT('%', :q, '%')) 
         OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')))
 """)
     Page<StockEntity> findSalesByProviderIdPaged(
             @Param("providerId") UUID providerId,
-            @Param("q") String q, // Añadir parámetro de búsqueda
+            @Param("q") String q,
             Pageable pageable
     );
 
@@ -205,5 +211,28 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
 
     Page<StockEntity> findByBuyerIdAndStatusInAndIdNotInAndEndAtLessThanEqual(
             UUID buyerId, List<String> statuses, List<Long> excludedIds, Instant limit, Pageable pageable);
+
+    // Ventas de un proveedor que vencen antes de una fecha específica
+    @Query("""
+  SELECT s
+  FROM StockEntity s
+  JOIN s.product p
+  WHERE p.providerId = :providerId
+    AND s.status = 'sold'
+    AND s.endAt IS NOT NULL
+    AND s.endAt >= :now 
+    AND s.endAt <= :limitDate
+    AND (:q IS NULL OR :q = '' 
+        OR LOWER(s.username) LIKE LOWER(CONCAT('%', :q, '%')) 
+        OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
+        OR CAST(s.id AS string) LIKE LOWER(CONCAT('%', :q, '%'))) 
+""")
+    Page<StockEntity> findSalesByProviderIdAndExpiringSoonPaged(
+            @Param("providerId") java.util.UUID providerId,
+            @Param("q") String q,
+            @Param("now") java.time.Instant now,
+            @Param("limitDate") java.time.Instant limitDate,
+            Pageable pageable
+    );
 }
 

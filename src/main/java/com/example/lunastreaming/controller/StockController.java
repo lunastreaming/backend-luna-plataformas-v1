@@ -151,9 +151,10 @@ public class StockController {
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String sort
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) Integer days // Frontend enviará ?days=5
     ) {
-        return stockService.listProviderSales(principal, q, page, size, sort);
+        return stockService.listProviderSales(principal, q, page, size, sort, days);
     }
 
     @PatchMapping("/stocks/{stockId}/approve")
