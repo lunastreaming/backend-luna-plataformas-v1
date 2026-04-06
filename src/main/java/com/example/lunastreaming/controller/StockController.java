@@ -43,6 +43,13 @@ public class StockController {
         return ResponseEntity.ok(stockService.createStock(stock, productId, principal));
     }
 
+    @PostMapping("/{stockId}/republish")
+    public ResponseEntity<StockResponse> republish(@PathVariable Long stockId,
+                                                   @RequestBody RepublishRequest request,
+                                                   Principal principal) {
+        return ResponseEntity.ok(stockService.republishStock(stockId, request, principal));
+    }
+
     @PostMapping("/batch")
     public ResponseEntity<BatchCreatedResponse> createBatch(
             @RequestBody StockBatchRequest request,
