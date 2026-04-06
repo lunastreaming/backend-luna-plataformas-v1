@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -68,6 +70,24 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
             @Param("stockId") Long stockId,
             @Param("type") String type,
             @Param("status") String status
+    );
+
+    @Query(value = """
+        SELECT 
+            type as concepto, 
+            COUNT(*) as totalOperaciones, 
+            SUM(amount) as ingresosTotales, 
+            currency as moneda
+        FROM wallet_transactions
+        WHERE type IN ('publish', 'password_change', 'phone_change')
+          AND status = 'applied'
+          AND created_at >= :startDate 
+          AND created_at <= :endDate
+        GROUP BY type, currency
+        """, nativeQuery = true)
+    List<Object[]> findDirectIncomesByDateRange(
+            @Param("startDate") Instant startDate,
+            @Param("endDate") Instant endDate
     );
 
 }
