@@ -6,10 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZoneId;
+import java.time.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -23,22 +20,32 @@ public class DashboardService {
 
 
     public List<DashboardIncomeDTO> getDirectIncomes(LocalDate start, LocalDate end) {
-        // Convertimos LocalDate (ej. 2024-04-01) al primer instante de ese día en Perú
-        // Esto en UTC se verá como las 05:00:00 AM del mismo día (o el anterior)
-        Instant startInstant = start.atStartOfDay(PERU_ZONE).toInstant();
+        // Inicio del día en Perú (00:00:00) convertido a OffsetDateTime
+        OffsetDateTime startODT = start.atStartOfDay(PERU_ZONE).toOffsetDateTime();
 
-        // Convertimos el fin del día (23:59:59.999) en Perú a su equivalente Instant UTC
-        Instant endInstant = end.atTime(LocalTime.MAX).atZone(PERU_ZONE).toInstant();
+        // Fin del día en Perú (23:59:59.999) convertido a OffsetDateTime
+        OffsetDateTime endODT = end.atTime(LocalTime.MAX).atZone(PERU_ZONE).toOffsetDateTime();
 
-        List<Object[]> results = repository.findDirectIncomesByDateRange(startInstant, endInstant);
+        // Ejecución de la consulta nativa
+        List<Object[]> results = repository.findDirectIncomesByDateRange(startODT, endODT);
 
         return results.stream()
-                .map(row -> new DashboardIncomeDTO(
-                        (String) row[0],
-                        ((Number) row[1]).longValue(),
-                        (java.math.BigDecimal) row[2],
-                        (String) row[3]
-                ))
+                .map(row -> {
+                    String concepto = (String) row[0];
+                    Long totalOps = ((Number) row[1]).longValue();
+
+                    // Obtenemos el valor y nos aseguramos de que sea positivo (absoluto)
+                    BigDecimal montoRaw = row[2] instanceof BigDecimal
+                            ? (BigDecimal) row[2]
+                            : new BigDecimal(row[2].toString());
+
+                    BigDecimal montoIngreso = montoRaw.abs(); // Aseguramos el valor para el Dashboard
+
+                    String moneda = (String) row[3];
+
+                    return new DashboardIncomeDTO(concepto, totalOps, montoIngreso, moneda);
+                })
                 .collect(Collectors.toList());
     }
+
 }
