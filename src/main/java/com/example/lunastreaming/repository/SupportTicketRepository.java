@@ -34,7 +34,7 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicketEnti
     @Query(
             value = "SELECT t FROM SupportTicketEntity t " +
                     "JOIN t.stock s " +
-                    "WHERE t.client.id = :clientId " + // Usamos t.client.id en lugar de t.clientId
+                    "WHERE t.client.id = :clientId " +
                     "AND t.status = :status",
             countQuery = "SELECT count(t) FROM SupportTicketEntity t " +
                     "JOIN t.stock s " +
