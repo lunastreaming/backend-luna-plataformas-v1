@@ -32,14 +32,17 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicketEnti
     List<SupportTicketEntity> findByStockId(Long stockId);
 
     @Query(
-            value = "SELECT t FROM SupportTicketEntity t " +
-                    "JOIN t.stock s " +
-                    "WHERE t.client.id = :clientId " +
-                    "AND t.status = :status",
-            countQuery = "SELECT count(t) FROM SupportTicketEntity t " +
-                    "JOIN t.stock s " +
-                    "WHERE t.client.id = :clientId " +
-                    "AND t.status = :status"
+            value = "SELECT t.* FROM support_tickets t " +
+                    "INNER JOIN stock s ON t.stock_id = s.id " +
+                    "WHERE t.client_id = :clientId " +
+                    "AND t.status = :status " +
+                    "AND s.deleted = false",
+            countQuery = "SELECT count(*) FROM support_tickets t " +
+                    "INNER JOIN stock s ON t.stock_id = s.id " +
+                    "WHERE t.client_id = :clientId " +
+                    "AND t.status = :status " +
+                    "AND s.deleted = false",
+            nativeQuery = true
     )
     Page<SupportTicketEntity> findByClientIdAndStatusWithActiveStock(
             @Param("clientId") UUID clientId,
