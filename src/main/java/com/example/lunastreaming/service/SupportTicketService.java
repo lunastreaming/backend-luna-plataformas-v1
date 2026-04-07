@@ -313,7 +313,7 @@ public class SupportTicketService {
 
         // 1) obtener tickets IN_PROCESS del cliente, paginados
         Page<SupportTicketEntity> ticketsPage =
-                supportTicketRepository.findByClientIdAndStatus(clientId, "IN_PROGRESS", pageable);
+                supportTicketRepository.findByClientIdAndStatusWithActiveStock(clientId, "IN_PROGRESS", pageable);
 
         if (ticketsPage.isEmpty()) {
             return Page.empty(pageable);

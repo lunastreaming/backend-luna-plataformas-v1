@@ -4,6 +4,8 @@ import com.example.lunastreaming.model.SupportTicketEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
@@ -28,5 +30,15 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicketEnti
 
 
     List<SupportTicketEntity> findByStockId(Long stockId);
+
+    @Query("SELECT t FROM SupportTicketEntity t " +
+            "JOIN t.stock s " +
+            "WHERE t.clientId = :clientId " +
+            "AND t.status = :status")
+    Page<SupportTicketEntity> findByClientIdAndStatusWithActiveStock(
+            @Param("clientId") UUID clientId,
+            @Param("status") String status,
+            Pageable pageable
+    );
 
 }
