@@ -234,5 +234,9 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
             @Param("limitDate") java.time.Instant limitDate,
             Pageable pageable
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM StockEntity s WHERE s.id = :id")
+    Optional<StockEntity> findByIdWithLock(@Param("id") Long id);
 }
 
