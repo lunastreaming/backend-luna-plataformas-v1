@@ -14,6 +14,8 @@ import lombok.*;
 public class RegisterRequest {
 
     @NotBlank
+    @Size(min = 4, max = 20)
+    @Pattern(regexp = "^[a-zA-Z0-9]+$")
     public String username;
 
     public String phone;

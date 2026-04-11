@@ -1,7 +1,9 @@
 package com.example.lunastreaming.util;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
@@ -10,7 +12,9 @@ import java.nio.file.AccessDeniedException;
 import java.util.HashMap;
 import java.util.Map;
 
+
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResponseStatusException.class)
@@ -46,5 +50,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
 
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, String>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        // 1. Logueamos el error real para nosotros (esto no lo ve el atacante)
+        log.warn("Intento de registro fallido: Errores de validación en los campos: {}",
+                ex.getBindingResult().getFieldErrors().stream()
+                        .map(e -> e.getField() + ":" + e.getCode())
+                        .toList());
+
+        // 2. Respondemos algo totalmente genérico al cliente
+        Map<String, String> response = new HashMap<>();
+        response.put("error", "invalid_request");
+        response.put("message", "La solicitud contiene datos no permitidos.");
+
+        return ResponseEntity.badRequest().body(response);
+    }
 
 }
