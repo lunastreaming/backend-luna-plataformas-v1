@@ -106,6 +106,19 @@ public class UserService {
     }
 
     public LoginResponse login(LoginRequest req, String rolExpected) {
+
+        if ("admin".equalsIgnoreCase(rolExpected)) {
+            // Solo permite letras (mayus/minus) y números.
+            // Si el username trae <script>, espacios o símbolos, fallará aquí.
+            if (req.username == null || !req.username.matches("^[a-zA-Z0-9]+$")) {
+                // Logueamos el intento sospechoso (opcional)
+                // log.warn("Intento de login admin con caracteres no permitidos: {}", req.username);
+
+                // Lanzamos error genérico para no dar pistas
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_credentials");
+            }
+        }
+
         Optional<UserEntity> opt = userRepository.findByUsername(req.username);
         if (opt.isEmpty()) opt = userRepository.findByPhone(req.username);
 
