@@ -4,10 +4,12 @@ import com.example.lunastreaming.model.SupportTicketEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -49,5 +51,11 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicketEnti
             @Param("status") String status,
             Pageable pageable
     );
+
+    @Modifying
+    @Query("UPDATE SupportTicketEntity t SET t.status = 'RESOLVED', t.resolvedAt = :now, " +
+            "t.resolutionNote = 'Ticket cerrado automáticamente por eliminación de stock' " +
+            "WHERE t.stock.id = :stockId AND t.status IN ('OPEN', 'IN_PROGRESS')")
+    void resolveOpenTicketsByStockId(@Param("stockId") Long stockId, @Param("now") Instant now);
 
 }

@@ -259,6 +259,8 @@ public class StockService {
             throw new IllegalStateException("No se puede eliminar un stock que ya ha sido vendido");
         }*/
 
+        supportTicketRepository.resolveOpenTicketsByStockId(stockId, Instant.now());
+
         // Hibernate ejecutará el UPDATE gracias a @SQLDelete
         stockRepository.delete(stock);
     }
