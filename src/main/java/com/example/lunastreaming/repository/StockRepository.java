@@ -46,12 +46,12 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
 """)
     Page<StockEntity> findSalesByProviderIdPaged(UUID providerId, Pageable pageable);
 
-    // MÉTODO NUEVO (Para tu buscador y filtros nuevos)
     @Query("""
   SELECT s FROM StockEntity s JOIN s.product p 
   WHERE p.providerId = :providerId 
     AND s.status = 'sold'
     AND (:q IS NULL OR :q = '' 
+        OR LOWER(CAST(s.id AS string)) LIKE LOWER(CONCAT('%', :q, '%')) 
         OR LOWER(s.username) LIKE LOWER(CONCAT('%', :q, '%')) 
         OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')))
 """)
@@ -225,7 +225,7 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     AND (:q IS NULL OR :q = '' 
         OR LOWER(s.username) LIKE LOWER(CONCAT('%', :q, '%')) 
         OR LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
-        OR CAST(s.id AS string) LIKE LOWER(CONCAT('%', :q, '%'))) 
+        OR LOWER(CAST(s.id AS string)) LIKE LOWER(CONCAT('%', :q, '%'))) 
 """)
     Page<StockEntity> findSalesByProviderIdAndExpiringSoonPaged(
             @Param("providerId") java.util.UUID providerId,
