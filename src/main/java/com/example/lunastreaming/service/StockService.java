@@ -625,34 +625,22 @@ public class StockService {
         int safePage = Math.max(0, page);
 
         // Lógica de ordenamiento
+        // Reemplaza toda tu lógica de ordenamiento por esta única línea:
         Sort sortObj = Sort.by(Sort.Direction.DESC, "soldAt");
-        if (sort != null && !sort.isBlank()) {
-            String[] parts = sort.split(",");
-            if (parts.length == 2) {
-                String field = parts[0];
-                Sort.Direction dir = "asc".equalsIgnoreCase(parts[1]) ? Sort.Direction.ASC : Sort.Direction.DESC;
-                sortObj = Sort.by(dir, field);
-            }
-        }
+
         Pageable pageable = PageRequest.of(safePage, safeSize, sortObj);
 
-        // **************** INICIO LÓGICA DE BÚSQUEDA Y REPOSITORIO ****************
-
-        // 1. Limpiar y determinar el término de búsqueda. Será 'null' si está vacío.
         final String searchQuery = (q == null || q.isBlank()) ? null : q.trim();
-
-        // 2. Definir los estados a incluir. (Usamos la constante del repositorio)
         List<String> statuses = List.of("sold", "REFUND", "refund_confirmed", "requested", "support", "RENEWED");
 
-        // 3. Llamar al nuevo método unificado del repositorio
-        // Este método busca por estado Y aplica el filtro de búsqueda si searchQuery NO es null
+        // Ejecuta la query (ahora con countQuery correcta)
         Page<StockEntity> pageResult = stockRepository.findByStatusInAndSearch(statuses, searchQuery, pageable);
 
-        // **************** FIN LÓGICA DE BÚSQUEDA Y REPOSITORIO ****************
+        // Obtener la lista de contenido para evitar llamadas repetitivas
+        List<StockEntity> stockList = pageResult.getContent();
 
-
-        // 4. Mapeo de Proveedores (lógica existente)
-        List<UUID> providerIds = pageResult.stream()
+        // 4. Mapeo de Proveedores
+        List<UUID> providerIds = stockList.stream()
                 .map(StockEntity::getProduct)
                 .filter(Objects::nonNull)
                 .map(ProductEntity::getProviderId)
@@ -664,13 +652,12 @@ public class StockService {
         if (providerIds.isEmpty()) {
             providerMap = Collections.emptyMap();
         } else {
-            // Asumimos que userRepository.findByIdIn está definido
             List<UserEntity> providers = userRepository.findByIdIn(providerIds);
             providerMap = providers.stream().collect(Collectors.toMap(UserEntity::getId, Function.identity()));
         }
 
-        // 5. Mapeo de Entidad a Respuesta (StockResponse)
-        List<StockResponse> content = pageResult.stream()
+        // 5. Mapeo de Entidad a Respuesta
+        List<StockResponse> content = stockList.stream()
                 .map(stock -> {
                     StockResponse resp = stockBuilder.toStockResponse(stock);
                     ProductEntity prod = stock.getProduct();
@@ -685,7 +672,7 @@ public class StockService {
                 })
                 .collect(Collectors.toList());
 
-        // 6. Retorno de la Respuesta Paginada
+        // 6. Retorno de la Respuesta Paginada correcta
         Page<StockResponse> mappedPage = new PageImpl<>(content, pageable, pageResult.getTotalElements());
         return toPagedResponse(mappedPage);
     }
