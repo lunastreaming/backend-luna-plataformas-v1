@@ -123,7 +123,10 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     Page<StockEntity> findByBuyerIdAndStatusAndIdNotIn(UUID buyerId, String status, List<Long> excludedIds, Pageable pageable);
 
 
-    @Query("SELECT s FROM StockEntity s WHERE s.product.providerId = :providerId AND s.endAt < :now")
+    @Query("SELECT s FROM StockEntity s " +
+            "WHERE s.product.providerId = :providerId " +
+            "AND s.endAt < :now " +
+            "AND UPPER(s.status) != 'RENEWED'") // 🚩 Excluye los que están en proceso de renovación
     Page<StockEntity> findExpiredStocks(@Param("providerId") UUID providerId,
                                         @Param("now") Instant now,
                                         Pageable pageable);

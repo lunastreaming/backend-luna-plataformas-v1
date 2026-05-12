@@ -254,10 +254,10 @@ public class StockService {
             throw new AccessDeniedException("No autorizado para eliminar este stock");
         }
 
-        /* VALIDACIÓN EXTRA: No borrar si ya fue vendido (Opcional pero recomendado)
-        if (stock.getSoldAt() != null || stock.getBuyer() != null) {
-            throw new IllegalStateException("No se puede eliminar un stock que ya ha sido vendido");
-        }*/
+        // 🚩 VALIDACIÓN EXTRA: Bloquear eliminación si está en renovación pendiente
+        if ("RENEWED".equalsIgnoreCase(stock.getStatus())) {
+            throw new IllegalStateException("No se puede eliminar un stock que tiene una renovación pendiente de aprobación.");
+        }
 
         supportTicketRepository.resolveOpenTicketsByStockId(stockId, Instant.now());
 
@@ -1278,10 +1278,10 @@ public class StockService {
                 throw new AccessDeniedException("No autorizado para eliminar el stock con ID: " + stock.getId());
             }
 
-            /* Evitar borrar stocks ya vendidos (Consistencia financiera)
-            if (stock.getSoldAt() != null) {
-                throw new IllegalStateException("El stock con ID " + stock.getId() + " ya ha sido vendido y no puede eliminarse");
-            }*/
+            // 🚩 VALIDACIÓN EXTRA: Bloquear en lote
+            if ("RENEWED".equalsIgnoreCase(stock.getStatus())) {
+                throw new IllegalStateException("El stock con ID " + stock.getId() + " tiene una renovación pendiente y no puede eliminarse.");
+            }
         }
 
         // 3. Ejecutar la eliminación
