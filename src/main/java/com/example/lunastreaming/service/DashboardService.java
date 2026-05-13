@@ -1,9 +1,12 @@
 package com.example.lunastreaming.service;
 
+import com.example.lunastreaming.model.CategoriaVentasDTO;
 import com.example.lunastreaming.model.DashboardIncomeDTO;
+import com.example.lunastreaming.repository.StockRepository;
 import com.example.lunastreaming.repository.WalletTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.*;
@@ -15,6 +18,7 @@ import java.util.stream.Collectors;
 public class DashboardService {
 
     private final WalletTransactionRepository repository;
+    private final StockRepository stockRepository;
 
     private static final ZoneId PERU_ZONE = ZoneId.of("America/Lima");
 
@@ -46,6 +50,19 @@ public class DashboardService {
                     return new DashboardIncomeDTO(concepto, totalOps, montoIngreso, moneda);
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<CategoriaVentasDTO> obtenerVentasPorCategoria(LocalDateTime startDate, LocalDateTime endDate) {
+        // Validación/Lógica por defecto: Si no envían fechas, toma los últimos 30 días
+        if (startDate == null) {
+            startDate = LocalDateTime.now().minusDays(30);
+        }
+        if (endDate == null) {
+            endDate = LocalDateTime.now();
+        }
+
+        return stockRepository.findVentasPorCategoriaEnRango(startDate, endDate);
     }
 
 }
