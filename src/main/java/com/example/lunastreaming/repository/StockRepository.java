@@ -271,17 +271,19 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     @Query(value = """
     SELECT 
         c.name AS categoria, 
-        COUNT(s.id) AS cantidadVendida, 
-        SUM(s.purchase_price) AS totalRecaudado
-    FROM public.stock s
+        COUNT(wt.id) AS cantidadVendida, -- Cuenta cada operación (Compra o Renovación)
+        SUM(wt.amount) AS totalRecaudado  -- Suma el dinero real que entró a la wallet
+    FROM public.wallet_transactions wt
+    INNER JOIN public.stock s ON wt.stock_id = s.id
     INNER JOIN public.products p ON s.product_id = p.id
     INNER JOIN public.category c ON p.category_id = c.id
-    WHERE (s.deleted = false OR s.sold_at IS NOT NULL)
-      AND s.sold_at BETWEEN :startDate AND :endDate
+    WHERE wt.status = 'approved' 
+      AND wt.type IN ('purchase', 'renewal')
+      AND wt.created_at BETWEEN :startDate AND :endDate
     GROUP BY c.name
     ORDER BY cantidadVendida DESC
     """, nativeQuery = true)
-    List<CategoriaVentasDTO> findVentasPorCategoriaEnRango(
+    List<CategoriaVentasDTO> findVentasYRenovacionesPorCategoria(
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
     );

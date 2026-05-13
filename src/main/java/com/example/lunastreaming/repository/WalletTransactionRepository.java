@@ -90,4 +90,28 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
             @Param("endDate") OffsetDateTime endDate
     );
 
+
+
+    interface BalanceMovimientosProyeccion {
+        Long getTotalRecargasContador();
+        java.math.BigDecimal getTotalRecargasMonto();
+        Long getTotalRetirosContador();
+        java.math.BigDecimal getTotalRetirosMonto();
+    }
+
+    @Query(value = """
+        SELECT 
+            COUNT(CASE WHEN t.type = 'recharge' THEN 1 END) AS totalRecargasContador,
+            COALESCE(SUM(CASE WHEN t.type = 'recharge' THEN t.amount END), 0) AS totalRecargasMonto,
+            COUNT(CASE WHEN t.type = 'withdrawal' THEN 1 END) AS totalRetirosContador,
+            COALESCE(SUM(CASE WHEN t.type = 'withdrawal' THEN t.amount END), 0) AS totalRetirosMonto
+        FROM public.wallet_transactions t
+        WHERE t.status IN ('approved', 'confirmed') -- Filtra solo transacciones exitosas
+          AND t.created_at BETWEEN :startDate AND :endDate
+        """, nativeQuery = true)
+    BalanceMovimientosProyeccion findBalanceMovimientosEnRango(
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate
+    );
+
 }

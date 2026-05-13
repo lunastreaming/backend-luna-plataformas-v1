@@ -1,5 +1,6 @@
 package com.example.lunastreaming.service;
 
+import com.example.lunastreaming.model.BalanceMovimientosDTO;
 import com.example.lunastreaming.model.CategoriaVentasDTO;
 import com.example.lunastreaming.model.DashboardIncomeDTO;
 import com.example.lunastreaming.repository.StockRepository;
@@ -62,7 +63,27 @@ public class DashboardService {
             endDate = LocalDateTime.now();
         }
 
-        return stockRepository.findVentasPorCategoriaEnRango(startDate, endDate);
+        return stockRepository.findVentasYRenovacionesPorCategoria(startDate, endDate);
+    }
+
+
+    @Transactional(readOnly = true)
+    public BalanceMovimientosDTO obtenerBalanceMovimientos(LocalDateTime startDate, LocalDateTime endDate) {
+        if (startDate == null) {
+            startDate = LocalDateTime.now().minusDays(30);
+        }
+        if (endDate == null) {
+            endDate = LocalDateTime.now();
+        }
+
+        var proyeccion = repository.findBalanceMovimientosEnRango(startDate, endDate);
+
+        return new BalanceMovimientosDTO(
+                proyeccion.getTotalRecargasContador(),
+                proyeccion.getTotalRecargasMonto(),
+                proyeccion.getTotalRetirosContador(),
+                proyeccion.getTotalRetirosMonto()
+        );
     }
 
 }

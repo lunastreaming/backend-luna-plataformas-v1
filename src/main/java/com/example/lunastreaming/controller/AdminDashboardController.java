@@ -1,5 +1,6 @@
 package com.example.lunastreaming.controller;
 
+import com.example.lunastreaming.model.BalanceMovimientosDTO;
 import com.example.lunastreaming.model.CategoriaVentasDTO;
 import com.example.lunastreaming.model.DashboardIncomeDTO;
 import com.example.lunastreaming.service.DashboardService;
@@ -53,6 +54,19 @@ public class AdminDashboardController {
 
         List<CategoriaVentasDTO> report = dashboardService.obtenerVentasPorCategoria(startDate, endDate);
         return ResponseEntity.ok(report);
+    }
+
+    @GetMapping("/balance-movimientos")
+    @PreAuthorize("hasRole('admin')")
+    public ResponseEntity<BalanceMovimientosDTO> getBalanceMovimientos(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+
+        BalanceMovimientosDTO balance = dashboardService.obtenerBalanceMovimientos(startDate, endDate);
+        return ResponseEntity.ok(balance);
     }
 
 }
