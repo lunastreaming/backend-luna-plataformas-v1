@@ -269,18 +269,18 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     Optional<StockEntity> findByIdWithLock(@Param("id") Long id);
 
     @Query(value = """
-        SELECT 
-            c.name AS categoria, 
-            COUNT(s.id) AS cantidadVendida, 
-            SUM(s.purchase_price) AS totalRecaudado
-        FROM public.stock s
-        INNER JOIN public.products p ON s.product_id = p.id
-        INNER JOIN public.category c ON p.category_id = c.id
-        WHERE s.deleted = false 
-          AND s.sold_at BETWEEN :startDate AND :endDate
-        GROUP BY c.name
-        ORDER BY cantidadVendida DESC
-        """, nativeQuery = true)
+    SELECT 
+        c.name AS categoria, 
+        COUNT(s.id) AS cantidadVendida, 
+        SUM(s.purchase_price) AS totalRecaudado
+    FROM public.stock s
+    INNER JOIN public.products p ON s.product_id = p.id
+    INNER JOIN public.category c ON p.category_id = c.id
+    WHERE (s.deleted = false OR s.sold_at IS NOT NULL)
+      AND s.sold_at BETWEEN :startDate AND :endDate
+    GROUP BY c.name
+    ORDER BY cantidadVendida DESC
+    """, nativeQuery = true)
     List<CategoriaVentasDTO> findVentasPorCategoriaEnRango(
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
