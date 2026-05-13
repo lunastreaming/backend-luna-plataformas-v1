@@ -268,22 +268,53 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
     @Query("SELECT s FROM StockEntity s WHERE s.id = :id")
     Optional<StockEntity> findByIdWithLock(@Param("id") Long id);
 
+
+    interface CategoriaVentasProyeccion {
+        String getCategoria();
+        Long getCantidadVendida();
+        java.math.BigDecimal getTotalRecaudado();
+    }
+
     @Query(value = """
     SELECT 
-        c.name AS categoria, 
-        COUNT(wt.id) AS cantidadVendida, -- Cuenta cada operación (Compra o Renovación)
-        SUM(wt.amount) AS totalRecaudado  -- Suma el dinero real que entró a la wallet
-    FROM public.wallet_transactions wt
-    INNER JOIN public.stock s ON wt.stock_id = s.id
-    INNER JOIN public.products p ON s.product_id = p.id
-    INNER JOIN public.category c ON p.category_id = c.id
-    WHERE wt.status = 'approved' 
-      AND wt.type IN ('purchase', 'renewal')
-      AND wt.created_at BETWEEN :startDate AND :endDate
+        c.name AS categoria,
+        
+        -- 1. Contamos TODAS las ventas físicas en stock + TODAS las renovaciones extras en wallet
+        (COUNT(DISTINCT s.id) + COALESCE(COUNT(DISTINCT wt_ren.id), 0)) AS cantidadVendida,
+        
+        -- 2. Sumamos el dinero real (Transacciones de compra O el precio base del stock si se vendió fuera de la wallet) + Renovaciones
+        (
+            COALESCE(SUM(DISTINCT CASE WHEN wt_pub.type = 'purchase' THEN wt_pub.amount END), 
+                     SUM(DISTINCT CASE WHEN s.sold_at IS NOT NULL THEN s.purchase_price END)) 
+            + 
+            COALESCE(SUM(DISTINCT CASE WHEN wt_ren.type = 'renewal' THEN wt_ren.amount END), 0)
+        ) AS totalRecaudado
+
+    FROM public.category c
+    INNER JOIN public.products p ON p.category_id = c.id
+    INNER JOIN public.stock s ON s.product_id = p.id
+    
+    -- LEFT JOIN A: Captura la transacción de COMPRA inicial si existe
+    LEFT JOIN public.wallet_transactions wt_pub ON wt_pub.stock_id = s.id 
+         AND wt_pub.type = 'purchase' 
+         AND wt_pub.status IN ('approved', 'confirmed')
+         
+    -- LEFT JOIN B: Captura TODAS las transacciones de RENOVACIÓN sucesivas
+    LEFT JOIN public.wallet_transactions wt_ren ON wt_ren.stock_id = s.id 
+         AND wt_ren.type = 'renewal' 
+         AND wt_ren.status IN ('approved', 'confirmed')
+         AND wt_ren.created_at BETWEEN :startDate AND :endDate
+
+    -- Filtramos que el stock haya tenido movimiento (Venta o Renovación) en el rango de fechas
+    WHERE (
+        (s.sold_at BETWEEN :startDate AND :endDate) 
+        OR 
+        (wt_ren.created_at BETWEEN :startDate AND :endDate)
+    )
     GROUP BY c.name
     ORDER BY cantidadVendida DESC
     """, nativeQuery = true)
-    List<CategoriaVentasDTO> findVentasYRenovacionesPorCategoria(
+    List<CategoriaVentasProyeccion> findVentasYRenovacionesHibrido(
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
     );

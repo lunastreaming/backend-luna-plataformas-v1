@@ -55,7 +55,7 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public List<CategoriaVentasDTO> obtenerVentasPorCategoria(LocalDateTime startDate, LocalDateTime endDate) {
-        // Validación/Lógica por defecto: Si no envían fechas, toma los últimos 30 días
+        // Lógica por defecto: Si no envían fechas, toma los últimos 30 días
         if (startDate == null) {
             startDate = LocalDateTime.now().minusDays(30);
         }
@@ -63,7 +63,18 @@ public class DashboardService {
             endDate = LocalDateTime.now();
         }
 
-        return stockRepository.findVentasYRenovacionesPorCategoria(startDate, endDate);
+        // 1. Llamamos al repositorio para obtener la lista de proyecciones nativas
+        List<StockRepository.CategoriaVentasProyeccion> proyecciones =
+                stockRepository.findVentasYRenovacionesHibrido(startDate, endDate);
+
+        // 2. Mapeamos la lista de proyecciones a tu lista de DTOs
+        return proyecciones.stream()
+                .map(p -> new CategoriaVentasDTO(
+                        p.getCategoria(),
+                        p.getCantidadVendida() != null ? p.getCantidadVendida() : 0L,
+                        p.getTotalRecaudado() != null ? p.getTotalRecaudado() : java.math.BigDecimal.ZERO
+                ))
+                .toList(); // En Java 17/21 puedes usar .toList() directo en lugar de .collect(Collectors.toList())
     }
 
 
