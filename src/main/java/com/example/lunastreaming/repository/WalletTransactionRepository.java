@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZonedDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -100,18 +101,18 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
     }
 
     @Query(value = """
-        SELECT 
-            COUNT(CASE WHEN t.type = 'recharge' THEN 1 END) AS totalRecargasContador,
-            COALESCE(SUM(CASE WHEN t.type = 'recharge' THEN t.amount END), 0) AS totalRecargasMonto,
-            COUNT(CASE WHEN t.type = 'withdrawal' THEN 1 END) AS totalRetirosContador,
-            COALESCE(SUM(CASE WHEN t.type = 'withdrawal' THEN t.amount END), 0) AS totalRetirosMonto
-        FROM public.wallet_transactions t
-        WHERE t.status IN ('approved', 'confirmed') -- Filtra solo transacciones exitosas
-          AND t.created_at BETWEEN :startDate AND :endDate
-        """, nativeQuery = true)
+    SELECT 
+        COUNT(CASE WHEN t.type = 'recharge' THEN 1 END) AS totalRecargasContador,
+        COALESCE(SUM(CASE WHEN t.type = 'recharge' THEN t.amount END), 0) AS totalRecargasMonto,
+        COUNT(CASE WHEN t.type = 'withdrawal' THEN 1 END) AS totalRetirosContador,
+        COALESCE(SUM(CASE WHEN t.type = 'withdrawal' THEN t.amount END), 0) AS totalRetirosMonto
+    FROM public.wallet_transactions t
+    WHERE t.status IN ('approved', 'confirmed')
+      AND t.created_at BETWEEN :startDate AND :endDate
+    """, nativeQuery = true)
     BalanceMovimientosProyeccion findBalanceMovimientosEnRango(
-            @Param("startDate") LocalDateTime startDate,
-            @Param("endDate") LocalDateTime endDate
+            @Param("startDate") ZonedDateTime startDate,
+            @Param("endDate") ZonedDateTime endDate
     );
 
 }

@@ -80,6 +80,7 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public BalanceMovimientosDTO obtenerBalanceMovimientos(LocalDateTime startDate, LocalDateTime endDate) {
+        // 1. Asignación de valores por defecto si vienen nulos
         if (startDate == null) {
             startDate = LocalDateTime.now().minusDays(30);
         }
@@ -87,7 +88,15 @@ public class DashboardService {
             endDate = LocalDateTime.now();
         }
 
-        var proyeccion = repository.findBalanceMovimientosEnRango(startDate, endDate);
+        // 2. Definimos la zona horaria del negocio (Perú)
+        ZoneId zonaPeru = ZoneId.of("America/Lima");
+
+        // 3. Convertimos los LocalDateTime planos a ZonedDateTime de Perú
+        ZonedDateTime startDateZoned = startDate.atZone(zonaPeru);
+        ZonedDateTime endDateZoned = endDate.atZone(zonaPeru);
+
+        // 4. Enviamos las fechas con zona horaria al repositorio
+        var proyeccion = repository.findBalanceMovimientosEnRango(startDateZoned, endDateZoned);
 
         return new BalanceMovimientosDTO(
                 proyeccion.getTotalRecargasContador(),
