@@ -3,6 +3,7 @@ package com.example.lunastreaming.service;
 
 import com.example.lunastreaming.builder.WalletBuilder;
 import com.example.lunastreaming.model.*;
+import com.example.lunastreaming.repository.PaymentMethodRepository;
 import com.example.lunastreaming.repository.SettingRepository;
 import com.example.lunastreaming.util.LunaException;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +45,8 @@ public class WalletService {
     private final SettingService settingService;
 
     private final SettingRepository settingRepository;
+
+    private final PaymentMethodRepository paymentMethodRepository;
 
     private static final int PAGE_SIZE = 100;
 
@@ -93,13 +96,24 @@ public class WalletService {
     }
 
     @Transactional
-    public WalletTransaction approveRecharge(UUID txId, String approverUsername) {
+    public WalletTransaction approveRecharge(UUID txId, UUID paymentMethodId, String approverUsername) {
         UUID approverId = UUID.fromString(approverUsername);
+
         WalletTransaction userWallet = walletTransactionRepository.findById(txId)
                 .orElseThrow(() -> new IllegalArgumentException("Transacción no encontrada"));
 
         if (!"pending".equalsIgnoreCase(userWallet.getStatus())) {
             throw new IllegalStateException("La transacción ya fue procesada");
+        }
+
+        // 1. Buscamos el método de pago seleccionado por el admin
+        PaymentMethodEntity paymentMethod = null;
+        if ("recharge".equalsIgnoreCase(userWallet.getType())) {
+            if (paymentMethodId == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El método de pago es obligatorio para recargas");
+            }
+            paymentMethod = paymentMethodRepository.findById(paymentMethodId)
+                    .orElseThrow(() -> new IllegalArgumentException("Método de pago no encontrado"));
         }
 
         UserEntity approver = userRepository.findById(approverId)
@@ -111,38 +125,32 @@ public class WalletService {
 
         UserEntity user = userWallet.getUser();
         BigDecimal userBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
-
-        // Usar el campo amount (monto original/bruto) como la base contable para el débito/abono.
         BigDecimal txAmount = userWallet.getAmount() != null ? userWallet.getAmount() : BigDecimal.ZERO;
 
         switch (userWallet.getType() == null ? "" : userWallet.getType().toLowerCase()) {
             case "recharge":
-                // acreditar montoBruto
                 user.setBalance(userBalance.add(txAmount));
                 userRepository.save(user);
                 break;
 
             case "withdrawal":
-                // validar saldo suficiente y debitar usando amount (sin aplicar descuentos adicionales)
                 if (userBalance.compareTo(txAmount) < 0) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Saldo insuficiente para aprobar este retiro");
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Saldo insuficiente");
                 }
                 user.setBalance(userBalance.subtract(txAmount));
                 userRepository.save(user);
-
-                // NOTA: el procesamiento de pago/payout debe usar tx.getRealAmount() (que contiene el monto neto)
-                // por ejemplo: payoutService.createPayout(user, tx.getRealAmount(), tx.getId());
                 break;
 
             default:
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de transacción no soportado: " + userWallet.getType());
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo no soportado");
         }
 
+        // 2. Asignamos los datos de control financiero
         userWallet.setStatus("approved");
         userWallet.setApprovedAt(Instant.now());
         userWallet.setApprovedBy(approver);
+        userWallet.setPaymentMethod(paymentMethod);
 
-        // Persistir y devolver
         return walletTransactionRepository.save(userWallet);
     }
 

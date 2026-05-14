@@ -3,6 +3,7 @@ package com.example.lunastreaming.controller;
 import com.example.lunastreaming.model.BalanceMovimientosDTO;
 import com.example.lunastreaming.model.CategoriaVentasDTO;
 import com.example.lunastreaming.model.DashboardIncomeDTO;
+import com.example.lunastreaming.model.PaymentMethodReportDTO;
 import com.example.lunastreaming.service.DashboardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -67,6 +68,14 @@ public class AdminDashboardController {
 
         BalanceMovimientosDTO balance = dashboardService.obtenerBalanceMovimientos(startDate, endDate);
         return ResponseEntity.ok(balance);
+    }
+
+    @GetMapping("/income-by-methods")
+    public ResponseEntity<List<PaymentMethodReportDTO>> getIncomeReport(
+            @RequestParam String startDate, // Formato esperado: YYYY-MM-DD
+            @RequestParam String endDate    // Formato esperado: YYYY-MM-DD
+    ) {
+        return ResponseEntity.ok(dashboardService.getIncomeByMethods(startDate, endDate));
     }
 
 }

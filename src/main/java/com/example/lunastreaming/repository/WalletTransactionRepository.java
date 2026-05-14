@@ -1,5 +1,6 @@
 package com.example.lunastreaming.repository;
 
+import com.example.lunastreaming.model.PaymentMethodReportDTO;
 import com.example.lunastreaming.model.WalletTransaction;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -114,5 +115,25 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
             @Param("startDate") ZonedDateTime startDate,
             @Param("endDate") ZonedDateTime endDate
     );
+
+
+    @Query(value = """
+        SELECT new com.example.lunastreaming.model.PaymentMethodReportDTO(
+            COALESCE(pm.name, 'Sin asignar'),
+            COALESCE(pm.color, '#9aa0a6'),
+            COUNT(t.id),
+            SUM(t.amount)
+        )
+        FROM WalletTransaction t
+        LEFT JOIN t.paymentMethod pm
+        WHERE t.status = 'approved'
+          AND t.type = 'recharge'
+          AND t.approvedAt >= :startDate
+          AND t.approvedAt <= :endDate
+        GROUP BY pm.name, pm.color
+        """)
+    List<PaymentMethodReportDTO> getReportByPaymentMethods(
+            @Param("startDate") Instant startDate,
+            @Param("endDate") Instant endDate);
 
 }

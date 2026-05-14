@@ -3,6 +3,7 @@ package com.example.lunastreaming.service;
 import com.example.lunastreaming.model.BalanceMovimientosDTO;
 import com.example.lunastreaming.model.CategoriaVentasDTO;
 import com.example.lunastreaming.model.DashboardIncomeDTO;
+import com.example.lunastreaming.model.PaymentMethodReportDTO;
 import com.example.lunastreaming.repository.StockRepository;
 import com.example.lunastreaming.repository.WalletTransactionRepository;
 import lombok.RequiredArgsConstructor;
@@ -104,6 +105,21 @@ public class DashboardService {
                 proyeccion.getTotalRetirosContador(),
                 proyeccion.getTotalRetirosMonto()
         );
+    }
+
+    public List<PaymentMethodReportDTO> getIncomeByMethods(String startStr, String endStr) {
+        // Convertir "YYYY-MM-DD" a Instant (Inicio del día en Perú -> UTC)
+        Instant start = LocalDate.parse(startStr)
+                .atStartOfDay(PERU_ZONE)
+                .toInstant();
+
+        // Convertir "YYYY-MM-DD" a Instant (Fin del día en Perú -> UTC)
+        Instant end = LocalDate.parse(endStr)
+                .atTime(LocalTime.MAX)
+                .atZone(PERU_ZONE)
+                .toInstant();
+
+        return repository.getReportByPaymentMethods(start, end);
     }
 
 }

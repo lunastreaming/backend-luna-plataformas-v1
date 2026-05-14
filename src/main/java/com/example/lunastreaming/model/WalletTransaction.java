@@ -61,4 +61,8 @@ public class WalletTransaction {
     private StockEntity stock;
 
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "payment_method_id", nullable = true)
+    private PaymentMethodEntity paymentMethod;
+
 }
