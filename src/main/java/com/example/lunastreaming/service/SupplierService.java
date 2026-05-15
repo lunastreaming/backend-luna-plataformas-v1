@@ -69,6 +69,7 @@ public class SupplierService {
                 .user(supplier)
                 .type("transfer")
                 .amount(totalToDebit.negate()) // proveedor paga monto + fee
+                .feeAmount(fee)
                 .currency("PEN")
                 .status("approved")
                 .createdAt(now)

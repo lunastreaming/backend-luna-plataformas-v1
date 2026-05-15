@@ -65,4 +65,8 @@ public class WalletTransaction {
     @JoinColumn(name = "payment_method_id", nullable = true)
     private PaymentMethodEntity paymentMethod;
 
+
+    @Column(name = "fee_amount")
+    private BigDecimal feeAmount;
+
 }

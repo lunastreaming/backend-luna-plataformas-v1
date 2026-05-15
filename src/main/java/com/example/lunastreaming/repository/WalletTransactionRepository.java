@@ -76,17 +76,38 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
     );
 
     @Query(value = """
-    SELECT 
-        type as concepto, 
-        COUNT(*) as totalOperaciones, 
-        SUM(ABS(amount)) as ingresosTotales, -- Convertimos a positivo para la plataforma
-        currency as moneda
-    FROM wallet_transactions
-    WHERE type IN ('publish', 'password_change', 'phone_change')
-      AND LOWER(status) = 'approved'
-      AND created_at BETWEEN :startDate AND :endDate
-    GROUP BY type, currency
-    """, nativeQuery = true)
+SELECT 
+    CASE 
+        WHEN type = 'withdrawal' THEN 'Comisiones por Retiro'
+        WHEN type = 'transfer' THEN 'Comisiones por Transferencia'
+        WHEN type = 'publish' THEN 'Publicaciones'
+        WHEN type = 'password_change' THEN 'Cambio de Contraseña'
+        WHEN type = 'phone_change' THEN 'Cambio de Teléfono'
+        ELSE type 
+    END as concepto, 
+    COUNT(*) as totalOperaciones, 
+    SUM(
+        CASE 
+            WHEN type IN ('withdrawal', 'transfer') THEN COALESCE(fee_amount, 0)
+            ELSE ABS(amount) 
+        END
+    ) as ingresosTotales,
+    currency as moneda
+FROM wallet_transactions
+WHERE type IN ('publish', 'password_change', 'phone_change', 'withdrawal', 'transfer')
+  AND LOWER(status) = 'approved'
+  AND created_at BETWEEN :startDate AND :endDate
+GROUP BY 
+    CASE 
+        WHEN type = 'withdrawal' THEN 'Comisiones por Retiro'
+        WHEN type = 'transfer' THEN 'Comisiones por Transferencia'
+        WHEN type = 'publish' THEN 'Publicaciones'
+        WHEN type = 'password_change' THEN 'Cambio de Contraseña'
+        WHEN type = 'phone_change' THEN 'Cambio de Teléfono'
+        ELSE type 
+    END, 
+    currency
+""", nativeQuery = true)
     List<Object[]> findDirectIncomesByDateRange(
             @Param("startDate") OffsetDateTime startDate,
             @Param("endDate") OffsetDateTime endDate

@@ -381,6 +381,7 @@ public class WalletService {
                 .user(user)
                 .type("withdrawal")
                 .amount(amountUnits)                 // BigDecimal unidades (ej. 1000.00)
+                .feeAmount(feeUnits)
                 .currency("USD")
                 .exchangeApplied(false)
                 .exchangeRate(null)
