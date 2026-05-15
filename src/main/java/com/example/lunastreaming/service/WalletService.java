@@ -23,10 +23,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.security.Principal;
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 
 @Service
@@ -267,8 +264,22 @@ public class WalletService {
     //Me trae todas las transacciones completadas
     public Page<WalletResponse> getUserTransactionsByStatus(UUID userId, String status, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        List<String> statusesToSearch = new ArrayList<>();
+
+        // Si el status solicitado es approved (o el por defecto), buscamos ambos
+        if ("approved".equalsIgnoreCase(status)) {
+            statusesToSearch.add("approved");
+            statusesToSearch.add("applied");
+        } else {
+            // Para otros casos como 'pending' o 'rejected'
+            statusesToSearch.add(status);
+        }
+
+        // Usamos el nuevo método del repositorio
         Page<WalletTransaction> pageResult = walletTransactionRepository
-                .findByUserIdAndStatusAndTypeNot(userId, status, "chargeback", pageable);
+                .findByUserIdAndStatusInAndTypeNot(userId, statusesToSearch, "chargeback", pageable);
+
         return pageResult.map(walletBuilder::builderToWalletResponse);
     }
 

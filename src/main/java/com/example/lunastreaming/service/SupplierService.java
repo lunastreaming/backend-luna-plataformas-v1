@@ -82,7 +82,7 @@ public class SupplierService {
                 .user(seller)
                 .type("transfer")
                 .amount(amount) // vendedor recibe monto completo
-                .currency("PEN")
+                .currency("USD")
                 .status("approved")
                 .createdAt(now)
                 .description("Transferencia recibida del proveedor " + supplier.getUsername())
