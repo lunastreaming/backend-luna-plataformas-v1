@@ -6,6 +6,7 @@ import com.example.lunastreaming.repository.*;
 import com.example.lunastreaming.util.RequestUtil;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.*;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -432,45 +433,35 @@ public class StockService {
             int page,
             int size,
             String sort,
-            Integer days // Filtro dinámico de días para vencimiento
+            Integer days
     ) {
         UUID buyerId = resolveUserIdFromPrincipal(principal);
 
-        // Configuración de paginación (por defecto ordena por fecha de venta)
+        // Configuración de paginación
         Pageable pageable = RequestUtil.createPageable(page, size, sort, "soldAt", MAX_PAGE_SIZE);
 
-        // 1) Obtener stockIds que tienen tickets en estado activo (OPEN, IN_PROGRESS) para excluirlos
-        List<Long> excludedStockIds = stockRepository.findStockIdsByStatusIn(List.of("OPEN", "IN_PROGRESS"));
+        // MEJORA 1: Ahora filtramos los tickets OPEN/IN_PROGRESS únicamente del usuario actual
+        List<Long> excludedStockIds = stockRepository.findStockIdsByStatusInAndBuyerId(
+                List.of("OPEN", "IN_PROGRESS"), buyerId
+        );
 
-        // 2) Definir estados permitidos para el listado de compras del cliente
         List<String> allowedStatuses = List.of("sold", "RENEWED");
+        Instant limitDate = (days != null) ? Instant.now().plus(days, ChronoUnit.DAYS) : null;
 
-        Page<StockEntity> p;
+        // MEJORA 2: Usamos Specification para resolver la Query dinámica (Filtro 'q' incluido aquí)
+        Specification<StockEntity> spec = StockSpecification.getPurchasesSpec(
+                buyerId, allowedStatuses, excludedStockIds, limitDate, q
+        );
 
-        // 3) Lógica de consulta según el filtro de días (near expiry)
-        if (days != null) {
-            // Solo ponemos el tope máximo (hoy + N días)
-            Instant limitDate = Instant.now().plus(days, ChronoUnit.DAYS);
+        // Ejecuta una sola consulta óptima con count estricto para la paginación
+        Page<StockEntity> p = stockRepository.findAll(spec, pageable);
 
-            if (excludedStockIds == null || excludedStockIds.isEmpty()) {
-                // Usamos LessThanEqual para traer TODO lo que venza antes de esa fecha
-                p = stockRepository.findByBuyerIdAndStatusInAndEndAtLessThanEqual(
-                        buyerId, allowedStatuses, limitDate, pageable);
-            } else {
-                p = stockRepository.findByBuyerIdAndStatusInAndIdNotInAndEndAtLessThanEqual(
-                        buyerId, allowedStatuses, excludedStockIds, limitDate, pageable);
-            }
-        } else {
-            // Comportamiento original: listar todas las compras sin importar la fecha de fin
-            if (excludedStockIds == null || excludedStockIds.isEmpty()) {
-                p = stockRepository.findByBuyerIdAndStatusIn(buyerId, allowedStatuses, pageable);
-            } else {
-                p = stockRepository.findByBuyerIdAndStatusInAndIdNotIn(buyerId, allowedStatuses, excludedStockIds, pageable);
-            }
-        }
+        // ==========================================
+        // El resto de tu código (Pasos 4, 5, 6 y 7) permanece EXACTAMENTE IGUAL
+        // ya que 'p' sigue siendo un Page<StockEntity>
+        // ==========================================
 
         // 4) Provider enrichment (Batch Processing)
-        // Extraemos todos los providerIds de la página actual para evitar el problema N+1
         Set<UUID> providerIds = p.stream()
                 .map(StockEntity::getProduct)
                 .filter(Objects::nonNull)
@@ -484,7 +475,7 @@ public class StockService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(UserEntity::getId, Function.identity()));
 
-        // 5) Obtener stockIds de la página resultante para cargar tickets cerrados (RESOLVED)
+        // 5) Obtener stockIds de la página resultante
         List<Long> pageStockIds = p.stream()
                 .map(StockEntity::getId)
                 .collect(Collectors.toList());
@@ -493,7 +484,7 @@ public class StockService {
                 ? Collections.emptyList()
                 : supportTicketRepository.findByStockIdInAndStatusIn(pageStockIds, List.of("RESOLVED"));
 
-        // 6) Mapear stockId -> ticket preferido (el más reciente basado en resolución o actualización)
+        // 6) Mapear stockId -> ticket preferido
         Map<Long, SupportTicketEntity> ticketByStockId = resolvedTickets.stream()
                 .collect(Collectors.groupingBy(
                         t -> t.getStock().getId(),
@@ -505,12 +496,10 @@ public class StockService {
                         )
                 ));
 
-        // 7) Transformar StockEntity a StockResponse y enriquecer con Provider y Soporte
+        // 7) Transformar StockEntity a StockResponse
         Page<StockResponse> mapped = p.map(stock -> {
-            // Usamos el builder existente para la estructura base
             StockResponse dto = stockBuilder.toStockResponse(stock);
 
-            // Enriquecimiento de datos del Proveedor (Provider)
             ProductEntity prod = stock.getProduct();
             if (prod != null && prod.getProviderId() != null) {
                 UserEntity prov = providersById.get(prod.getProviderId());
@@ -520,7 +509,6 @@ public class StockService {
                 }
             }
 
-            // Enriquecimiento de Soporte: Solo si existe un ticket resuelto para este stock
             SupportTicketEntity ticket = ticketByStockId.get(stock.getId());
             if (ticket != null) {
                 dto.setSupportId(ticket.getId());
@@ -539,7 +527,6 @@ public class StockService {
 
         return toPagedResponse(mapped);
     }
-
     /**
      * Método auxiliar para encapsular la lógica de consulta a BD
      */
