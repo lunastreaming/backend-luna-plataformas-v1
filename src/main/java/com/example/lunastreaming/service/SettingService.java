@@ -87,24 +87,24 @@ public class SettingService {
     }
 
     public void saveSetting() {
-        SettingEntity supplierDiscount = SettingEntity.builder()
-                .key("supplierDiscount")
-                .type("number")
-                .valueNum(new BigDecimal("0.10"))      // 0.10 = 10%
-                .description("Descuento por proveedor (por ejemplo 0.10 = 10%)")
-                .updatedAt(Instant.now())
-                .build();
+        // Lista de configuraciones que queremos asegurar en la BD
+        saveOrUpdate("supplierTransferDiscount", "number", new BigDecimal("0.20"), "Descuento por proveedor para transferencias");
+        saveOrUpdate("supplierWithdrawalDiscount", "number", new BigDecimal("0.20"), "Descuento por proveedor para retiros");
+        saveOrUpdate("supplierPublication", "number", new BigDecimal("15"), "Costo por publicación para proveedores");
 
-        SettingEntity supplierPublication = SettingEntity.builder()
-                .key("supplierPublication")
-                .type("number")
-                .valueNum(new BigDecimal("15"))        // costo/valor por publicación
-                .description("Costo/valor por publicación para proveedores")
-                .updatedAt(Instant.now())
-                .build();
-
-        settingRepository.save(supplierDiscount);
-        settingRepository.save(supplierPublication);
     }
 
+    private void saveOrUpdate(String key, String type, BigDecimal value, String description) {
+        // Buscamos si ya existe por key para mantener el mismo ID y hacer un UPDATE, si no, creamos uno nuevo
+        SettingEntity setting = settingRepository.findByKeyIgnoreCase(key)
+                .orElseGet(SettingEntity::new);
+
+        setting.setKey(key);
+        setting.setType(type);
+        setting.setValueNum(value);
+        setting.setDescription(description);
+        setting.setUpdatedAt(Instant.now());
+
+        settingRepository.save(setting);
+    }
 }

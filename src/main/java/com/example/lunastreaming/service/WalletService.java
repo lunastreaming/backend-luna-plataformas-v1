@@ -189,7 +189,7 @@ public class WalletService {
                 .findByStatusAndUserRoleAndTypes("pending", role, types);
 
         // Obtenemos el valor numérico directamente
-        BigDecimal discountFactor = settingRepository.findByKeyIgnoreCase("supplierDiscount")
+        BigDecimal discountFactor = settingRepository.findByKeyIgnoreCase("supplierWithdrawalDiscount")
                 .map(SettingEntity::getValueNum)
                 .orElse(BigDecimal.ZERO);
 
@@ -354,12 +354,12 @@ public class WalletService {
             throw new IllegalArgumentException("Monto inválido");
         }
 
-        // 1) obtener supplierDiscount desde SettingService
+        // 1) obtener supplierWithdrawalDiscount desde SettingService
         BigDecimal supplierDiscountFraction = BigDecimal.ZERO; // fracción: 0.15 = 15%
         List<SettingResponse> settings = settingService.getSettings();
         if (settings != null) {
             for (SettingResponse s : settings) {
-                if ("supplierDiscount".equalsIgnoreCase(s.getKey())) {
+                if ("supplierWithdrawalDiscount".equalsIgnoreCase(s.getKey())) {
                     BigDecimal raw = s.getValueNum() != null ? s.getValueNum() : BigDecimal.ZERO;
                     // Si el valor está en formato entero porcentual (ej. 15) lo convertimos a fracción (0.15).
                     // Si ya viene como 0.15, lo usamos tal cual.

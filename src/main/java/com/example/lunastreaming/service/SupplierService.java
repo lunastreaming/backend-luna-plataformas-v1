@@ -31,7 +31,7 @@ public class SupplierService {
         }
 
         // 1. Obtener descuento desde settings
-        Optional<SettingEntity> discountSetting = settingRepository.findByKeyIgnoreCase("SupplierDiscount");
+        Optional<SettingEntity> discountSetting = settingRepository.findByKeyIgnoreCase("supplierTransferDiscount");
         BigDecimal discountFraction = BigDecimal.ZERO;
         if (discountSetting.isPresent()) {
             BigDecimal raw = discountSetting.get().getValueNum();
