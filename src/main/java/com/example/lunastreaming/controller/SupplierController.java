@@ -63,6 +63,7 @@ public class SupplierController {
     }
 
     @GetMapping("/sales/provider/renewed")
+    @PreAuthorize("hasRole('provider')")
     public ResponseEntity<Page<StockResponse>> getProviderRenewedStocks(
             Principal principal,
             @PageableDefault(size = 20) Pageable pageable

@@ -21,6 +21,7 @@ public class ProductController {
     private final ProductService productService;
 
     @PostMapping
+    @PreAuthorize("hasRole('provider')")
     public ProductEntity create(@RequestBody ProductEntity product, Principal principal) {
         // Extraer el providerId desde el usuario autenticado
         UUID providerId = UUID.fromString(principal.getName());
@@ -64,6 +65,7 @@ public class ProductController {
     }
 
     @PatchMapping("/{id}/publish")
+    @PreAuthorize("hasRole('provider')")
     public ResponseEntity<ProductResponse> publishProduct(@PathVariable UUID id, Principal principal) {
         // Cambiamos el tipo de 'ProductEntity' a 'ProductResponse'
         ProductResponse response = productService.publishProduct(id, principal);
@@ -71,6 +73,7 @@ public class ProductController {
     }
 
     @PatchMapping("/{id}/publish/renew")
+    @PreAuthorize("hasRole('provider')")
     public ResponseEntity<ProductResponse> renewProduct(@PathVariable UUID id, Principal principal) {
         // Cambiamos el tipo de 'ProductEntity' a 'ProductResponse'
         ProductResponse response = productService.renewProduct(id, principal);
