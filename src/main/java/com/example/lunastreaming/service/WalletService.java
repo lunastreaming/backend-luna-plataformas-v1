@@ -3,6 +3,7 @@ package com.example.lunastreaming.service;
 
 import com.example.lunastreaming.builder.WalletBuilder;
 import com.example.lunastreaming.model.*;
+import com.example.lunastreaming.model.admin.TransactionResponseDto;
 import com.example.lunastreaming.repository.PaymentMethodRepository;
 import com.example.lunastreaming.repository.SettingRepository;
 import com.example.lunastreaming.util.LunaException;
@@ -11,20 +12,20 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
 import com.example.lunastreaming.repository.UserRepository;
 import com.example.lunastreaming.repository.WalletTransactionRepository;
-import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.security.Principal;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.*;
-
 
 @Service
 @RequiredArgsConstructor
@@ -46,6 +47,8 @@ public class WalletService {
     private final PaymentMethodRepository paymentMethodRepository;
 
     private static final int PAGE_SIZE = 100;
+
+    private static final ZoneId PERU_ZONE = ZoneId.of("America/Lima");
 
     public WalletTransaction requestRecharge(UUID userId, BigDecimal amount, boolean isSoles) {
         UserEntity user = userRepository.findById(userId)
@@ -551,6 +554,37 @@ public class WalletService {
                 .build();
 
         walletTransactionRepository.save(depositTx);
+    }
+
+
+    private static final Set<String> ALLOWED_TYPES = Set.of("recharge", "purchase", "sale");
+
+    @Transactional(readOnly = true)
+    public List<TransactionResponseDto> getLatestTransactions(UUID userId, String type, int limit) {
+        String lowerType = type.toLowerCase().trim();
+
+        if (!ALLOWED_TYPES.contains(lowerType)) {
+            throw new IllegalArgumentException("Tipo de transacción no válido para este reporte: " + type);
+        }
+
+        int safeLimit = Math.min(limit, 100);
+        Pageable pageable = PageRequest.of(0, safeLimit);
+
+        List<WalletTransaction> transactions = walletTransactionRepository.findLatestApprovedByUserIdAndType(userId, lowerType, pageable);
+
+        // Mapeamos la entidad al DTO convirtiendo el Instant a la hora de Perú
+        // Dentro del método de mapeo en tu servicio:
+        return transactions.stream()
+                .map(t -> new TransactionResponseDto(
+                        t.getId(),
+                        t.getType(),
+                        t.getAmount(),
+                        t.getCurrency(),
+                        t.getStatus(),
+                        t.getDescription(),
+                        t.getCreatedAt().atZone(ZoneId.of("America/Lima")) // Convierte el Instant UTC a la hora de Perú
+                ))
+                .toList();
     }
 
 }

@@ -2,6 +2,7 @@ package com.example.lunastreaming.repository;
 
 import com.example.lunastreaming.model.PaymentMethodReportDTO;
 import com.example.lunastreaming.model.WalletTransaction;
+import com.example.lunastreaming.model.admin.TransactionResponseDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -163,4 +164,17 @@ GROUP BY
             @Param("startDate") Instant startDate,
             @Param("endDate") Instant endDate);
 
+
+    @Query("""
+        FROM WalletTransaction t
+        WHERE t.user.id = :userId 
+          AND t.type = :type
+          AND t.status = 'approved'
+        ORDER BY t.createdAt DESC
+        """)
+    List<WalletTransaction> findLatestApprovedByUserIdAndType(
+            @Param("userId") UUID userId,
+            @Param("type") String type,
+            Pageable pageable
+    );
 }

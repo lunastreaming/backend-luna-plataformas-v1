@@ -1,6 +1,7 @@
 package com.example.lunastreaming.controller;
 
 import com.example.lunastreaming.model.*;
+import com.example.lunastreaming.model.admin.TransactionResponseDto;
 import com.example.lunastreaming.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -118,5 +119,17 @@ public class WalletController {
         WalletTransaction result = walletService.extornoRecharge(txId, principal.getName());
         return ResponseEntity.ok(result);
     }
+
+    //Permitirá saber las ultimas recargas y compras del usuario
+    @GetMapping("/{userId}/transactions")
+    public ResponseEntity<List<TransactionResponseDto>> getLatestTransactions(
+            @PathVariable UUID userId,
+            @RequestParam String type,
+            @RequestParam(defaultValue = "10") int limit) {
+
+        List<TransactionResponseDto> transactions = walletService.getLatestTransactions(userId, type, limit);
+        return ResponseEntity.ok(transactions);
+    }
+
 
 }
