@@ -13,6 +13,7 @@ public record InactiveUserDto(
         BigDecimal balance,
         Integer salesCount,
         String status,
-        LocalDateTime lastTransactionAt // Fecha convertida a Zona Horaria de Perú
+        LocalDateTime lastTransactionAt,
+        Long daysInactive
 ) {
 }
