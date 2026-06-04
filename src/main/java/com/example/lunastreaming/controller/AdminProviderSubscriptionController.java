@@ -61,4 +61,11 @@ public class AdminProviderSubscriptionController {
         return ResponseEntity.ok(response);
     }
 
+    // 5. Eliminar una suscripción y todos sus pagos asociados
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteSubscription(@PathVariable UUID id) {
+        subscriptionService.deleteSubscription(id);
+        return ResponseEntity.noContent().build(); // Retorna un HTTP 204 No Content
+    }
+
 }

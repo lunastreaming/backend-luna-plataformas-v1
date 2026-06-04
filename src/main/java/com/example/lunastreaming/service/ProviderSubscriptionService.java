@@ -189,4 +189,13 @@ public class ProviderSubscriptionService {
                 paymentDtos
         );
     }
+
+    @Transactional
+    public void deleteSubscription(UUID id) {
+        if (!subscriptionRepository.existsById(id)) {
+            throw new RuntimeException("No se puede eliminar. Suscripción no encontrada con ID: " + id);
+        }
+        subscriptionRepository.deleteById(id);
+    }
+
 }
