@@ -148,7 +148,7 @@ public class SupportTicketService {
 
         // 1) obtener tickets OPEN del cliente, paginados
         Page<SupportTicketEntity> ticketsPage =
-                supportTicketRepository.findByClientIdAndStatus(clientId, "OPEN", pageable);
+                supportTicketRepository.findActiveTicketsWithActiveStocks(clientId, pageable);
 
         if (ticketsPage.isEmpty()) {
             return Page.empty(pageable);
