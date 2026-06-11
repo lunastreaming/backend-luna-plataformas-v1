@@ -34,8 +34,8 @@ app:
     validity-ms: 43200000
 # Agregado para WhatsApp en DEV
 whatsapp:
-  service-url: "http://localhost:3000/instance/send-otp"
-  instance-id: "luna-streaming2"
+  service-url: "localhost:3000"
+  instance-id: "luna-streaming"
 
 ---
 spring:

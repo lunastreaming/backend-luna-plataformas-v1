@@ -24,11 +24,14 @@ public class OtpController {
     @PostMapping("/solicitar")
     public ResponseEntity<?> solicitarOtp(@Valid @RequestBody OtpRequestDTO request) {
         try {
-            otpService.solicitarOtp(request.telefono());
+            otpService.solicitarOtp(request.telefono(), request.contexto());
             return ResponseEntity.ok(Map.of("success", true, "message", "Código OTP enviado con éxito."));
-        } catch (RuntimeException e) {
-            // Manejo simplificado: Retorna un 429 Too Many Requests si choca con el Rate Limit
+        } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Error interno al procesar la solicitud."));
         }
     }
 
