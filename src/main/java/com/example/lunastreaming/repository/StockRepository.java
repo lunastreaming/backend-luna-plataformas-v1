@@ -295,7 +295,7 @@ WITH compras_stock AS (
     LEFT JOIN public.wallet_transactions wt ON wt.stock_id = s.id 
         AND wt.type = 'purchase' 
         AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-    WHERE s.sold_at::timestamp BETWEEN :startDate AND :endDate
+    WHERE (s.sold_at AT TIME ZONE 'America/Lima')::timestamp BETWEEN :startDate AND :endDate
       AND s.deleted = false
     GROUP BY p.category_id
 ),
@@ -309,7 +309,7 @@ renovaciones_stock AS (
     INNER JOIN public.products p ON s.product_id = p.id
     WHERE wt.type = 'renewal'
       AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-      AND wt.created_at::timestamp BETWEEN :startDate AND :endDate
+      AND (wt.created_at AT TIME ZONE 'America/Lima')::timestamp BETWEEN :startDate AND :endDate
     GROUP BY p.category_id
 ),
 universidad_categorias AS (
