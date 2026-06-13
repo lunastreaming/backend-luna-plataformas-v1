@@ -285,17 +285,14 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> , JpaS
 WITH compras_stock AS (
     SELECT 
         p.category_id,
-        COUNT(s.id) AS cant_ventas,
-        SUM(COALESCE(
-            CASE WHEN wt.amount < 0 THEN wt.amount * -1 ELSE wt.amount END, 
-            p.sale_price
-        )) AS monto_ventas
-    FROM public.stock s
+        COUNT(wt.id) AS cant_ventas,
+        SUM(CASE WHEN wt.amount < 0 THEN wt.amount * -1 ELSE wt.amount END) AS monto_ventas
+    FROM public.wallet_transactions wt
+    INNER JOIN public.stock s ON wt.stock_id = s.id
     INNER JOIN public.products p ON s.product_id = p.id
-    LEFT JOIN public.wallet_transactions wt ON wt.stock_id = s.id 
-        AND wt.type = 'purchase' 
-        AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-    WHERE (s.sold_at AT TIME ZONE 'America/Lima')::timestamp BETWEEN :startDate AND :endDate
+    WHERE wt.type = 'purchase' 
+      AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
+      AND wt.created_at::timestamp BETWEEN :startDate AND :endDate
       AND s.deleted = false
     GROUP BY p.category_id
 ),
@@ -309,7 +306,8 @@ renovaciones_stock AS (
     INNER JOIN public.products p ON s.product_id = p.id
     WHERE wt.type = 'renewal'
       AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-      AND (wt.created_at AT TIME ZONE 'America/Lima')::timestamp BETWEEN :startDate AND :endDate
+      AND wt.created_at::timestamp BETWEEN :startDate AND :endDate
+      AND s.deleted = false
     GROUP BY p.category_id
 ),
 universidad_categorias AS (
