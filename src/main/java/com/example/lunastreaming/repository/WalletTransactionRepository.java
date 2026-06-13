@@ -2,6 +2,7 @@ package com.example.lunastreaming.repository;
 
 import com.example.lunastreaming.model.PaymentMethodReportDTO;
 import com.example.lunastreaming.model.WalletTransaction;
+import com.example.lunastreaming.model.admin.ProveedorCategoriaVentasProyeccion;
 import com.example.lunastreaming.model.admin.TransactionResponseDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -176,5 +177,63 @@ GROUP BY
             @Param("userId") UUID userId,
             @Param("type") String type,
             Pageable pageable
+    );
+
+    @Query(value = """
+WITH ventas_proveedor AS (
+    -- A. Filtramos las transacciones de tipo 'sale' usando directamente created_at casteado a timestamp nativo
+    SELECT 
+        p.category_id,
+        COUNT(wt.id) AS cant_ventas,
+        SUM(wt.amount) AS monto_ventas
+    FROM public.wallet_transactions wt
+    INNER JOIN public.stock s ON wt.stock_id = s.id
+    INNER JOIN public.products p ON s.product_id = p.id
+    WHERE p.provider_id = :providerId
+      AND wt.type = 'sale'
+      AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
+      -- COMPARACIÓN DIRECTA EN EL MISMO IDIOMA DE TIMEZONE (-0500)
+      AND wt.created_at::timestamp BETWEEN :startDate AND :endDate
+    GROUP BY p.category_id
+),
+renovaciones_proveedor AS (
+    -- B. Filtramos las transacciones 'provider_renewal' usando directamente created_at casteado
+    SELECT 
+        p.category_id,
+        COUNT(wt.id) AS cant_renovaciones,
+        SUM(wt.amount) AS monto_renovaciones
+    FROM public.wallet_transactions wt
+    INNER JOIN public.stock s ON wt.stock_id = s.id
+    INNER JOIN public.products p ON s.product_id = p.id
+    WHERE p.provider_id = :providerId
+      AND wt.type = 'provider_renewal'
+      AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
+      -- COMPARACIÓN DIRECTA EN EL MISMO IDIOMA DE TIMEZONE (-0500)
+      AND wt.created_at::timestamp BETWEEN :startDate AND :endDate
+    GROUP BY p.category_id
+),
+universidad_categorias AS (
+    SELECT category_id FROM ventas_proveedor
+    UNION
+    SELECT category_id FROM renovaciones_proveedor
+)
+SELECT 
+    c.id AS categoryId,
+    c.name AS categoriaNombre,
+    (COALESCE(vp.cant_ventas, 0)::int8) AS cantidadVentas,
+    (COALESCE(vp.monto_ventas, 0.00)::numeric(20,2)) AS montoVentas,
+    (COALESCE(rp.cant_renovaciones, 0)::int8) AS cantidadRenovaciones,
+    (COALESCE(rp.monto_renovaciones, 0.00)::numeric(20,2)) AS montoRenovaciones,
+    ((COALESCE(vp.monto_ventas, 0.00) + COALESCE(rp.monto_renovaciones, 0.00))::numeric(20,2)) AS totalRecaudado
+FROM universidad_categorias uc
+INNER JOIN public.category c ON c.id = uc.category_id
+LEFT JOIN ventas_proveedor vp ON vp.category_id = uc.category_id
+LEFT JOIN renovaciones_proveedor rp ON rp.category_id = uc.category_id
+ORDER BY totalRecaudado DESC
+""", nativeQuery = true)
+    List<ProveedorCategoriaVentasProyeccion> findReporteCategoriasPorProveedor(
+            @Param("providerId") UUID providerId,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate
     );
 }

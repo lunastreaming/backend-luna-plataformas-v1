@@ -4,6 +4,7 @@ import com.example.lunastreaming.model.BalanceMovimientosDTO;
 import com.example.lunastreaming.model.CategoriaVentasDTO;
 import com.example.lunastreaming.model.DashboardIncomeDTO;
 import com.example.lunastreaming.model.PaymentMethodReportDTO;
+import com.example.lunastreaming.model.admin.ProveedorCategoriaReporteDTO;
 import com.example.lunastreaming.repository.StockRepository;
 import com.example.lunastreaming.repository.WalletTransactionRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -120,6 +122,28 @@ public class DashboardService {
                 .toInstant();
 
         return repository.getReportByPaymentMethods(start, end);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProveedorCategoriaReporteDTO> obtenerReporteCategoriasPorProveedor(
+            UUID providerId, LocalDateTime startDate, LocalDateTime endDate) {
+
+        // Rango por defecto si no envían fechas
+        if (startDate == null) startDate = LocalDateTime.now().minusDays(30);
+        if (endDate == null) endDate = LocalDateTime.now();
+
+        return repository.findReporteCategoriasPorProveedor(providerId, startDate, endDate)
+                .stream()
+                .map(p -> new ProveedorCategoriaReporteDTO(
+                        p.getCategoryId(),
+                        p.getCategoriaNombre(),
+                        p.getCantidadVentas(),
+                        p.getMontoVentas(),
+                        p.getCantidadRenovaciones(),
+                        p.getMontoRenovaciones(),
+                        p.getTotalRecaudado()
+                ))
+                .toList();
     }
 
 }

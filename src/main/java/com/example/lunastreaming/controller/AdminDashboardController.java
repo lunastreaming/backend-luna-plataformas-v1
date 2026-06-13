@@ -4,21 +4,20 @@ import com.example.lunastreaming.model.BalanceMovimientosDTO;
 import com.example.lunastreaming.model.CategoriaVentasDTO;
 import com.example.lunastreaming.model.DashboardIncomeDTO;
 import com.example.lunastreaming.model.PaymentMethodReportDTO;
+import com.example.lunastreaming.model.admin.ProveedorCategoriaReporteDTO;
 import com.example.lunastreaming.service.DashboardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin/dashboard")
@@ -76,6 +75,18 @@ public class AdminDashboardController {
             @RequestParam String endDate    // Formato esperado: YYYY-MM-DD
     ) {
         return ResponseEntity.ok(dashboardService.getIncomeByMethods(startDate, endDate));
+    }
+
+
+    @GetMapping("/proveedores/{providerId}/reporte-categorias")
+    @PreAuthorize("hasRole('admin')") // O los roles que correspondan
+    public ResponseEntity<List<ProveedorCategoriaReporteDTO>> getReporteCategorias(
+            @PathVariable UUID providerId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+
+        List<ProveedorCategoriaReporteDTO> report = dashboardService.obtenerReporteCategoriasPorProveedor(providerId, startDate, endDate);
+        return ResponseEntity.ok(report);
     }
 
 }
