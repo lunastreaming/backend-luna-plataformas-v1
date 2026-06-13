@@ -58,7 +58,6 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public List<CategoriaVentasDTO> obtenerVentasPorCategoria(LocalDateTime startDate, LocalDateTime endDate) {
-        // Lógica por defecto: Si no envían fechas, toma los últimos 30 días
         if (startDate == null) {
             startDate = LocalDateTime.now().minusDays(30);
         }
@@ -66,20 +65,22 @@ public class DashboardService {
             endDate = LocalDateTime.now();
         }
 
-        // 1. Llamamos al repositorio para obtener la lista de proyecciones nativas
+        // Llamamos al método usando la proyección corregida externa o interna
         List<StockRepository.CategoriaVentasProyeccion> proyecciones =
                 stockRepository.findVentasYRenovacionesHibrido(startDate, endDate);
 
-        // 2. Mapeamos la lista de proyecciones a tu lista de DTOs
         return proyecciones.stream()
                 .map(p -> new CategoriaVentasDTO(
                         p.getCategoria(),
-                        p.getCantidadVendida() != null ? p.getCantidadVendida() : 0L,
-                        p.getTotalRecaudado() != null ? p.getTotalRecaudado() : java.math.BigDecimal.ZERO
+                        p.getCantidadVentas() != null ? p.getCantidadVentas() : 0L,
+                        p.getMontoVentas() != null ? p.getMontoVentas() : BigDecimal.ZERO,
+                        p.getCantidadRenovaciones() != null ? p.getCantidadRenovaciones() : 0L,
+                        p.getMontoRenovaciones() != null ? p.getMontoRenovaciones() : BigDecimal.ZERO,
+                        p.getTotalUnidades() != null ? p.getTotalUnidades() : 0L,
+                        p.getTotalRecaudado() != null ? p.getTotalRecaudado() : BigDecimal.ZERO
                 ))
-                .toList(); // En Java 17/21 puedes usar .toList() directo en lugar de .collect(Collectors.toList())
+                .toList();
     }
-
 
     @Transactional(readOnly = true)
     public BalanceMovimientosDTO obtenerBalanceMovimientos(LocalDateTime startDate, LocalDateTime endDate) {

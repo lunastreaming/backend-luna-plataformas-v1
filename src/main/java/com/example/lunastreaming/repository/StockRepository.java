@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -270,10 +271,14 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> , JpaS
     Optional<StockEntity> findByIdWithLock(@Param("id") Long id);
 
 
-    interface CategoriaVentasProyeccion {
+    public interface CategoriaVentasProyeccion {
         String getCategoria();
-        Long getCantidadVendida();
-        java.math.BigDecimal getTotalRecaudado();
+        Long getCantidadVentas();
+        BigDecimal getMontoVentas();
+        Long getCantidadRenovaciones();
+        BigDecimal getMontoRenovaciones();
+        Long getTotalUnidades();
+        BigDecimal getTotalRecaudado();
     }
 
     @Query(value = """
@@ -290,8 +295,7 @@ WITH compras_stock AS (
     LEFT JOIN public.wallet_transactions wt ON wt.stock_id = s.id 
         AND wt.type = 'purchase' 
         AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-    -- CONVERSIÓN CRÍTICA: Convertimos el timestamp de la BD a Zona Horaria de Perú antes del BETWEEN
-    WHERE (s.sold_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') BETWEEN :startDate AND :endDate
+    WHERE s.sold_at::timestamp BETWEEN :startDate AND :endDate
       AND s.deleted = false
     GROUP BY p.category_id
 ),
@@ -305,8 +309,7 @@ renovaciones_stock AS (
     INNER JOIN public.products p ON s.product_id = p.id
     WHERE wt.type = 'renewal'
       AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-      -- CONVERSIÓN CRÍTICA: Convertimos el timestamp de la BD a Zona Horaria de Perú antes del BETWEEN
-      AND (wt.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') BETWEEN :startDate AND :endDate
+      AND wt.created_at::timestamp BETWEEN :startDate AND :endDate
     GROUP BY p.category_id
 ),
 universidad_categorias AS (
@@ -316,13 +319,17 @@ universidad_categorias AS (
 )
 SELECT 
     c.name AS categoria,
-    ((COALESCE(cs.cant_ventas, 0) + COALESCE(rs.cant_renovaciones, 0))::int8) AS cantidadVendida,
+    (COALESCE(cs.cant_ventas, 0)::int8) AS cantidadVentas,
+    (COALESCE(cs.monto_ventas, 0.00)::numeric(20,2)) AS montoVentas,
+    (COALESCE(rs.cant_renovaciones, 0)::int8) AS cantidadRenovaciones,
+    (COALESCE(rs.monto_renovaciones, 0.00)::numeric(20,2)) AS montoRenovaciones,
+    ((COALESCE(cs.cant_ventas, 0) + COALESCE(rs.cant_renovaciones, 0))::int8) AS totalUnidades,
     ((COALESCE(cs.monto_ventas, 0.00) + COALESCE(rs.monto_renovaciones, 0.00))::numeric(20,2)) AS totalRecaudado
 FROM universidad_categorias uc
 INNER JOIN public.category c ON c.id = uc.category_id
 LEFT JOIN compras_stock cs ON cs.category_id = uc.category_id
 LEFT JOIN renovaciones_stock rs ON rs.category_id = uc.category_id
-ORDER BY cantidadVendida DESC
+ORDER BY totalRecaudado DESC
 """, nativeQuery = true)
     List<CategoriaVentasProyeccion> findVentasYRenovacionesHibrido(
             @Param("startDate") LocalDateTime startDate,

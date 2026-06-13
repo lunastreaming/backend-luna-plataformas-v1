@@ -4,6 +4,10 @@ import java.math.BigDecimal;
 
 public record CategoriaVentasDTO(
         String categoria,
-        Long cantidadVendida,
-        BigDecimal totalRecaudado
+        Long cantidadVentas,
+        BigDecimal montoVentas,
+        Long cantidadRenovaciones,
+        BigDecimal montoRenovaciones,
+        Long totalUnidades,       // cantidadVentas + cantidadRenovaciones
+        BigDecimal totalRecaudado  // montoVentas + montoRenovaciones
 ) {}
