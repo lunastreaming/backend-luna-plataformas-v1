@@ -292,7 +292,8 @@ WITH compras_stock AS (
     INNER JOIN public.products p ON s.product_id = p.id
     WHERE wt.type = 'purchase' 
       AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-      AND wt.created_at::timestamp BETWEEN :startDate AND :endDate
+      -- Modificación aquí: Convertimos la hora de la BD de UTC a tu hora local (Ej: America/Lima)
+      AND (wt.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') BETWEEN :startDate AND :endDate
       AND s.deleted = false
     GROUP BY p.category_id
 ),
@@ -306,7 +307,8 @@ renovaciones_stock AS (
     INNER JOIN public.products p ON s.product_id = p.id
     WHERE wt.type = 'renewal'
       AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-      AND wt.created_at::timestamp BETWEEN :startDate AND :endDate
+      -- Modificación aquí también
+      AND (wt.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') BETWEEN :startDate AND :endDate
       AND s.deleted = false
     GROUP BY p.category_id
 ),
