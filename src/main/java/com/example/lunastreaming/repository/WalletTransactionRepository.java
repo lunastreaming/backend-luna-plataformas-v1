@@ -181,7 +181,7 @@ GROUP BY
 
     @Query(value = """
 WITH ventas_proveedor AS (
-    -- A. Filtramos las transacciones de tipo 'sale' usando directamente created_at casteado a timestamp nativo
+    -- A. Filtramos las transacciones de tipo 'sale' convirtiendo el tiempo del servidor a hora Perú
     SELECT 
         p.category_id,
         COUNT(wt.id) AS cant_ventas,
@@ -192,12 +192,12 @@ WITH ventas_proveedor AS (
     WHERE p.provider_id = :providerId
       AND wt.type = 'sale'
       AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-      -- COMPARACIÓN DIRECTA EN EL MISMO IDIOMA DE TIMEZONE (-0500)
-      AND wt.created_at::timestamp BETWEEN :startDate AND :endDate
+      -- AJUSTE: Resta las horas de desfase del servidor para evaluar en día Perú
+      AND (wt.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima')::timestamp BETWEEN :startDate AND :endDate
     GROUP BY p.category_id
 ),
 renovaciones_proveedor AS (
-    -- B. Filtramos las transacciones 'provider_renewal' usando directamente created_at casteado
+    -- B. Filtramos las transacciones 'provider_renewal' convirtiendo el tiempo del servidor a hora Perú
     SELECT 
         p.category_id,
         COUNT(wt.id) AS cant_renovaciones,
@@ -208,8 +208,8 @@ renovaciones_proveedor AS (
     WHERE p.provider_id = :providerId
       AND wt.type = 'provider_renewal'
       AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-      -- COMPARACIÓN DIRECTA EN EL MISMO IDIOMA DE TIMEZONE (-0500)
-      AND wt.created_at::timestamp BETWEEN :startDate AND :endDate
+      -- AJUSTE: Resta las horas de desfase del servidor para evaluar en día Perú
+      AND (wt.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima')::timestamp BETWEEN :startDate AND :endDate
     GROUP BY p.category_id
 ),
 universidad_categorias AS (
