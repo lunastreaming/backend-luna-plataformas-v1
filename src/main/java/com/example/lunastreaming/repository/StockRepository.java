@@ -278,12 +278,9 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> , JpaS
 
     @Query(value = """
 WITH compras_stock AS (
-    -- A. Para las compras, nos basamos en los stocks vendidos.
-    -- Si en el futuro guardas el stock_id en wallet_transactions, esta query seguirá funcionando perfectamente.
     SELECT 
         p.category_id,
         COUNT(s.id) AS cant_ventas,
-        -- Multiplicamos por -1 solo si el monto es negativo, si no, usamos el precio del producto.
         SUM(COALESCE(
             CASE WHEN wt.amount < 0 THEN wt.amount * -1 ELSE wt.amount END, 
             p.sale_price
@@ -293,13 +290,12 @@ WITH compras_stock AS (
     LEFT JOIN public.wallet_transactions wt ON wt.stock_id = s.id 
         AND wt.type = 'purchase' 
         AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-    WHERE s.sold_at BETWEEN :startDate AND :endDate
+    -- CONVERSIÓN CRÍTICA: Convertimos el timestamp de la BD a Zona Horaria de Perú antes del BETWEEN
+    WHERE (s.sold_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') BETWEEN :startDate AND :endDate
       AND s.deleted = false
     GROUP BY p.category_id
 ),
 renovaciones_stock AS (
-    -- B. Para las renovaciones, como SÍ tienen stock_id, las agrupamos directo.
-    -- Multiplicamos el monto por -1 para convertir el cobro negativo en recaudación positiva.
     SELECT 
         p.category_id,
         COUNT(wt.id) AS cant_renovaciones,
@@ -309,7 +305,8 @@ renovaciones_stock AS (
     INNER JOIN public.products p ON s.product_id = p.id
     WHERE wt.type = 'renewal'
       AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
-      AND wt.created_at BETWEEN :startDate AND :endDate
+      -- CONVERSIÓN CRÍTICA: Convertimos el timestamp de la BD a Zona Horaria de Perú antes del BETWEEN
+      AND (wt.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') BETWEEN :startDate AND :endDate
     GROUP BY p.category_id
 ),
 universidad_categorias AS (
