@@ -26,7 +26,7 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   cors:
-    allowed-origins: http://localhost:3001
+    allowed-origins: http://localhost:3000
 
 app:
   jwt:
@@ -34,7 +34,7 @@ app:
     validity-ms: 43200000
 # Agregado para WhatsApp en DEV
 whatsapp:
-  service-url: "localhost:3000"
+  service-url: "http://localhost:3000/instance/send-otp"
   instance-id: "luna-streaming"
 
 ---
