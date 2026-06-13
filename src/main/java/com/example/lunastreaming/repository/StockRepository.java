@@ -281,11 +281,13 @@ WITH compras_stock AS (
     SELECT 
         p.category_id,
         COUNT(s.id) AS cant_ventas,
+        -- Sumamos estrictamente el monto de la transacción de compra. 
+        -- Si por alguna razón la transacción no existe en wallet, se usa el precio base del producto.
         SUM(COALESCE(wt.amount, p.sale_price)) AS monto_ventas
     FROM public.stock s
     INNER JOIN public.products p ON s.product_id = p.id
     LEFT JOIN public.wallet_transactions wt ON wt.stock_id = s.id 
-        AND wt.type = 'purchase' 
+        AND wt.type = 'purchase' -- FILTRO CRÍTICO: Ignora 'refund', 'adjustment', etc.
         AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
     WHERE s.sold_at BETWEEN :startDate AND :endDate
       AND s.deleted = false
@@ -299,13 +301,12 @@ renovaciones_stock AS (
     FROM public.wallet_transactions wt
     INNER JOIN public.stock s ON wt.stock_id = s.id
     INNER JOIN public.products p ON s.product_id = p.id
-    WHERE wt.type = 'renewal'
+    WHERE wt.type = 'renewal' -- FILTRO CRÍTICO: Solo sumamos renovaciones
       AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
       AND wt.created_at BETWEEN :startDate AND :endDate
     GROUP BY p.category_id
 ),
 universidad_categorias AS (
-    -- Obtenemos todos los category_id que tienen movimiento en este rango de fechas
     SELECT category_id FROM compras_stock
     UNION
     SELECT category_id FROM renovaciones_stock
