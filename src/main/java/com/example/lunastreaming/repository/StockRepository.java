@@ -278,30 +278,36 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> , JpaS
 
     @Query(value = """
 WITH compras_stock AS (
+    -- A. Para las compras, nos basamos en los stocks vendidos.
+    -- Si en el futuro guardas el stock_id en wallet_transactions, esta query seguirá funcionando perfectamente.
     SELECT 
         p.category_id,
         COUNT(s.id) AS cant_ventas,
-        -- Sumamos estrictamente el monto de la transacción de compra. 
-        -- Si por alguna razón la transacción no existe en wallet, se usa el precio base del producto.
-        SUM(COALESCE(wt.amount, p.sale_price)) AS monto_ventas
+        -- Multiplicamos por -1 solo si el monto es negativo, si no, usamos el precio del producto.
+        SUM(COALESCE(
+            CASE WHEN wt.amount < 0 THEN wt.amount * -1 ELSE wt.amount END, 
+            p.sale_price
+        )) AS monto_ventas
     FROM public.stock s
     INNER JOIN public.products p ON s.product_id = p.id
     LEFT JOIN public.wallet_transactions wt ON wt.stock_id = s.id 
-        AND wt.type = 'purchase' -- FILTRO CRÍTICO: Ignora 'refund', 'adjustment', etc.
+        AND wt.type = 'purchase' 
         AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
     WHERE s.sold_at BETWEEN :startDate AND :endDate
       AND s.deleted = false
     GROUP BY p.category_id
 ),
 renovaciones_stock AS (
+    -- B. Para las renovaciones, como SÍ tienen stock_id, las agrupamos directo.
+    -- Multiplicamos el monto por -1 para convertir el cobro negativo en recaudación positiva.
     SELECT 
         p.category_id,
         COUNT(wt.id) AS cant_renovaciones,
-        SUM(wt.amount) AS monto_renovaciones
+        SUM(wt.amount * -1) AS monto_renovaciones
     FROM public.wallet_transactions wt
     INNER JOIN public.stock s ON wt.stock_id = s.id
     INNER JOIN public.products p ON s.product_id = p.id
-    WHERE wt.type = 'renewal' -- FILTRO CRÍTICO: Solo sumamos renovaciones
+    WHERE wt.type = 'renewal'
       AND LOWER(wt.status) IN ('approved', 'applied', 'confirmed')
       AND wt.created_at BETWEEN :startDate AND :endDate
     GROUP BY p.category_id
